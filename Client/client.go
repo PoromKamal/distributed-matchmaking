@@ -6,79 +6,100 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// Broadcast UDP port
-const broadcastPort = 9999
+const (
+	listenPort = 9999
+	signature  = "CHAT_CONTROLLER"
+)
+
+type Controller struct {
+	IP            string
+	OneWayDelayMS int64
+}
 
 func main() {
-	reader := bufio.NewReader(os.Stdin)
-
-	// Prompt for username
+	// Prompt the user for their username
 	fmt.Print("Enter your username: ")
+	reader := bufio.NewReader(os.Stdin)
 	username, err := reader.ReadString('\n')
 	if err != nil {
-		fmt.Println("Error reading input:", err)
-		return
+		log.Fatalf("Failed to read username: %v", err)
 	}
-	username = strings.TrimSpace(username)
+	username = strings.TrimSpace(username) // Remove trailing newline or spaces
 
-	// Clear the previous line and display the welcome message
-	fmt.Print("\033[1A") // Move cursor up one line
-	fmt.Print("\033[2K") // Clear the line
-	fmt.Printf("Welcome to FastChat, %s!\n", username)
+	fmt.Printf("\rWelcome to FastChat, %s!\n", username)
 
-	// Start broadcaster and listener in goroutines
-	go startBroadcaster()
-	go startListener()
-
-	// Keep the program running
-	select {}
-}
-
-// Broadcast IP address over the network
-func startBroadcaster() {
-	broadcastAddr := fmt.Sprintf("10.255.255.255:%d", broadcastPort)
-	conn, err := net.Dial("udp", broadcastAddr)
+	// Resolve UDP address to listen for broadcasts
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", listenPort))
 	if err != nil {
-		log.Fatalf("Broadcast connection failed: %v", err)
+		log.Fatalf("Failed to resolve address: %v", err)
+	}
+
+	// Create UDP socket for listening
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		log.Fatalf("Failed to listen on UDP port: %v", err)
 	}
 	defer conn.Close()
 
+	log.Printf("Listening for broadcasts on port %d...", listenPort)
+
+	// Store discovered controllers
+	var controllers []Controller
+	buffer := make([]byte, 1024)
+
 	for {
-		localAddr := conn.LocalAddr().(*net.UDPAddr)
-		message := fmt.Sprintf("User:%s IP:%s", "FastChat", localAddr.IP.String())
-		_, err := conn.Write([]byte(message))
+		// Read incoming UDP packet
+		n, remoteAddr, err := conn.ReadFromUDP(buffer)
 		if err != nil {
-			log.Printf("Broadcast error: %v", err)
-		}
-		log.Printf("Broadcasting: %s", message)
-		time.Sleep(5 * time.Second)
-	}
-}
-
-// Listen for broadcasts
-func startListener() {
-	addr := net.UDPAddr{
-		Port: broadcastPort,
-		IP:   net.IPv4zero,
-	}
-
-	conn, err := net.ListenUDP("udp", &addr)
-	if err != nil {
-		log.Fatalf("Listener setup failed: %v", err)
-	}
-	defer conn.Close()
-
-	buf := make([]byte, 1024)
-	for {
-		n, remoteAddr, err := conn.ReadFromUDP(buf)
-		if err != nil {
-			log.Printf("Read error: %v", err)
+			log.Printf("Error reading UDP packet: %v", err)
 			continue
 		}
-		log.Printf("Received: %s from %s", string(buf[:n]), remoteAddr)
+
+		// Process the packet
+		message := string(buffer[:n])
+		parts := strings.Split(message, "|")
+		if len(parts) == 3 && parts[0] == signature {
+			controllerIP := parts[1]
+			timestampStr := parts[2]
+
+			// Parse timestamp from the message
+			sentTime, err := strconv.ParseInt(timestampStr, 10, 64)
+			if err != nil {
+				log.Printf("Invalid timestamp in message: %s", message)
+				continue
+			}
+
+			// Calculate one-way delay (assuming relatively synchronized clocks)
+			now := time.Now().UnixNano()
+			oneWayDelay := (now - sentTime) / 1_000_000 // Convert nanoseconds to milliseconds
+
+			// Add to controllers list if not already present
+			found := false
+			for _, c := range controllers {
+				if c.IP == controllerIP {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				controller := Controller{
+					IP:            controllerIP,
+					OneWayDelayMS: oneWayDelay,
+				}
+				controllers = append(controllers, controller)
+
+				log.Printf("Discovered controller: %+v", controller)
+			} else {
+				log.Printf("Controller %s already in list", controllerIP)
+			}
+		} else {
+			log.Printf("Received non-controller message from %s: %s", remoteAddr, message)
+		}
 	}
 }
