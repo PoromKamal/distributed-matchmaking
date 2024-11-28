@@ -40,7 +40,7 @@ func main() {
 
 // Broadcast IP address over the network
 func startBroadcaster() {
-	broadcastAddr := fmt.Sprintf("255.255.255.255:%d", broadcastPort)
+	broadcastAddr := fmt.Sprintf("10.255.255.255:%d", broadcastPort)
 	conn, err := net.Dial("udp", broadcastAddr)
 	if err != nil {
 		log.Fatalf("Broadcast connection failed: %v", err)
