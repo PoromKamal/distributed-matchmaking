@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -15,7 +16,15 @@ const (
 
 func main() {
 	// Resolve UDP address for broadcast
-	broadcastAddr := "255.255.255.255:9999"
+	env := flag.String("env", "", "Specify environment (mn for Mininet)")
+	flag.Parse()
+	broadcastAddr := ""
+	if *env == "mn" {
+		broadcastAddr = "10.255.255.255:9999"
+	} else {
+		broadcastAddr = "255.255.255.255:9999"
+	}
+	log.Printf("Broadcasting to %s...", broadcastAddr)
 	addr, err := net.ResolveUDPAddr("udp", broadcastAddr)
 	if err != nil {
 		log.Fatalf("Failed to resolve address: %v", err)
