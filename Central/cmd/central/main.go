@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	// Initialize stores
+	// Initialize stores and API
 	clientStore := ClientAPI.NewInMemoryStore()
 	clientAPI := ClientAPI.NewClientAPI(clientStore)
 

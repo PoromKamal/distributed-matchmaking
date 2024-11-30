@@ -11,7 +11,8 @@ type ClientAPI struct {
 	store Store
 }
 
-// NewClientAPI initializes a new ClientAPI instance.
+/* Static Methods */
+
 func NewClientAPI(store Store) *ClientAPI {
 	return &ClientAPI{store: store}
 }
