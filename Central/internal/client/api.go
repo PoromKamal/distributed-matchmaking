@@ -1,4 +1,4 @@
-package main
+package clientapi
 
 import (
 	"net/http"
@@ -6,14 +6,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CentralAPI represents the REST API for the Central service.
-type CentralAPI struct {
-	store Store // Store interface for flexible backend storage
+// ClientAPI represents the REST API for the Client service.
+type ClientAPI struct {
+	store Store
 }
 
-// NewCentralAPI initializes a new CentralAPI instance.
-func NewCentralAPI(store Store) *CentralAPI {
-	return &CentralAPI{store: store}
+// NewClientAPI initializes a new ClientAPI instance.
+func NewClientAPI(store Store) *ClientAPI {
+	return &ClientAPI{store: store}
+}
+
+// RegisterRoutes sets up client-related routes.
+func (api *ClientAPI) RegisterRoutes(router *gin.Engine) {
+	group := router.Group("/clients")
+	{
+		group.POST("", api.RegisterClient)
+		group.GET("", api.GetClient)
+		group.GET("/:username", api.GetClientByUsername)
+		group.DELETE("", api.DeleteClient)
+	}
 }
 
 // ClientRegistrationRequest represents the payload for client registration.
@@ -22,7 +33,7 @@ type ClientRegistrationRequest struct {
 }
 
 // RegisterClient handles client registration (POST).
-func (api *CentralAPI) RegisterClient(c *gin.Context) {
+func (api *ClientAPI) RegisterClient(c *gin.Context) {
 	var req ClientRegistrationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON payload"})
@@ -39,7 +50,7 @@ func (api *CentralAPI) RegisterClient(c *gin.Context) {
 }
 
 // GetClient handles retrieving a client by IP (GET).
-func (api *CentralAPI) GetClient(c *gin.Context) {
+func (api *ClientAPI) GetClient(c *gin.Context) {
 	clientIP := c.ClientIP()
 
 	username, err := api.store.Read(clientIP)
@@ -51,7 +62,7 @@ func (api *CentralAPI) GetClient(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ip": clientIP, "username": username})
 }
 
-func (api *CentralAPI) GetClientByUsername(c *gin.Context) {
+func (api *ClientAPI) GetClientByUsername(c *gin.Context) {
 	username := c.Param("username")
 
 	clientIP, err := api.store.ReadByUsername(username)
@@ -64,7 +75,7 @@ func (api *CentralAPI) GetClientByUsername(c *gin.Context) {
 }
 
 // DeleteClient handles deleting a client by IP (DELETE).
-func (api *CentralAPI) DeleteClient(c *gin.Context) {
+func (api *ClientAPI) DeleteClient(c *gin.Context) {
 	clientIP := c.ClientIP()
 
 	if err := api.store.Delete(clientIP); err != nil {
@@ -73,24 +84,4 @@ func (api *CentralAPI) DeleteClient(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Client deleted", "ip": clientIP})
-}
-
-func main() {
-	// Initialize the in-memory store
-	store := NewInMemoryStore()
-
-	// Initialize the Central API
-	api := NewCentralAPI(store)
-
-	// Create a Gin router
-	router := gin.Default()
-
-	// Define routes and methods
-	router.POST("/clients", api.RegisterClient) // POST
-	router.GET("/clients", api.GetClient)       // GET
-	router.GET("/clients/:username", api.GetClientByUsername)
-	router.DELETE("/clients", api.DeleteClient) // DELETE
-
-	// Start the HTTP server
-	router.Run(":8080") // Default listen on :8080
 }
