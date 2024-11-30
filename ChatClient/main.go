@@ -1,7 +1,7 @@
 package main
 
-import startup_runner "fastchat/startup"
+import startupRunner "fastchat/startup"
 
 func main() {
-	startup_runner.StartupClient()
+	startupRunner.StartupClient()
 }
