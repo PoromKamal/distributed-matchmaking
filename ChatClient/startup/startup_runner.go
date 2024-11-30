@@ -31,6 +31,6 @@ func StartupClient() {
 }
 
 func clearLastLine() {
-	fmt.Print("\033[1A")
-	fmt.Print("\033[2K")
+	// fmt.Print("\033[1A")
+	// fmt.Print("\033[2K")
 }
