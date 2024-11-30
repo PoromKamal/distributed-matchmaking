@@ -8,7 +8,7 @@ import (
 // Store is an interface to define generic storage behavior.
 type Store interface {
 	Create(ip string) error
-	Read() (string, error)
+	Read() ([]string, error)
 	Delete(ip string) error
 	Patch(ip string) (string, error)
 }
@@ -27,7 +27,7 @@ func NewInMemoryStore() *InMemoryStore {
 }
 
 // Create adds an IP-to-username mapping to the store.
-func (s *InMemoryStore) Create(ip, username string) error {
+func (s *InMemoryStore) Create(ip string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
