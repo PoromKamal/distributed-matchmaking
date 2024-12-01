@@ -29,6 +29,7 @@ func StartupClient() {
 		fmt.Println("Failed to connect to FastChat!")
 		os.Exit(1)
 	}
+	clientInstance.StartMatchmaking()
 }
 
 func clearLastLine() {

@@ -19,11 +19,19 @@ type InMemoryStore struct {
 	mu   sync.RWMutex
 }
 
-// NewInMemoryStore initializes a new InMemoryStore.
-func NewInMemoryStore() *InMemoryStore {
-	return &InMemoryStore{
-		data: make(map[string]bool),
-	}
+var (
+	instance *InMemoryStore
+	once     sync.Once
+)
+
+// GetInMemoryStore returns the singleton instance of InMemoryStore.
+func GetInMemoryStore() *InMemoryStore {
+	once.Do(func() {
+		instance = &InMemoryStore{
+			data: make(map[string]bool),
+		}
+	})
+	return instance
 }
 
 // Create adds an IP-to-username mapping to the store.

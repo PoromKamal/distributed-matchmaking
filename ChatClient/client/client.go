@@ -24,6 +24,62 @@ type Client struct {
 var lock = &sync.Mutex{}
 var clientInstance *Client
 
+func (c *Client) StartMatchmaking() error {
+	conn, err := net.Dial("tcp", "localhost:8081") // Establish a connection to the matchmaking server
+	fmt.Println(err)
+	if err != nil {
+		return fmt.Errorf("failed to connect to matchmaking server: %w", err)
+	}
+	defer conn.Close()
+
+	fmt.Printf("Connected to matchmaking server at %s\n", c.CentralURL)
+
+	// Send initial message to the server
+	initialMessage := fmt.Sprintf("Hello, this is %s\n", c.UserName)
+	_, err = conn.Write([]byte(initialMessage))
+	if err != nil {
+		return fmt.Errorf("failed to send initial message: %w", err)
+	}
+
+	// Continuously read messages from the server
+	go func() {
+		for {
+			buf := make([]byte, 1024)
+			n, err := conn.Read(buf)
+			if err != nil {
+				if err == io.EOF {
+					fmt.Println("Connection closed by server.")
+				} else {
+					fmt.Printf("Error reading from server: %v\n", err)
+				}
+				break
+			}
+
+			message := string(buf[:n])
+			fmt.Printf("Message from server: %s\n", message)
+		}
+	}()
+
+	// Allow the client to send messages to the server interactively
+	for {
+		fmt.Print("Enter message (type 'exit' to quit): ")
+		var input string
+		fmt.Scanln(&input)
+
+		if input == "exit" {
+			fmt.Println("Exiting matchmaking...")
+			break
+		}
+
+		_, err := conn.Write([]byte(input + "\n"))
+		if err != nil {
+			return fmt.Errorf("failed to send message: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // PingServer pings a server and calculates the two-way delay.
 func pingServer(serverIP string) (float32, error) {
 	fmt.Println("Pinging server %s...\n", serverIP)
@@ -177,7 +233,10 @@ func (c *Client) Register() <-chan bool {
 			return
 		}
 
+		body, _ := io.ReadAll(resp.Body)
+
 		fmt.Println("Successfully registered with Central!")
+		fmt.Println(string(body))
 		result <- true
 	}()
 	return result

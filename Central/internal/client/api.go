@@ -1,6 +1,7 @@
 package clientapi
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,8 +11,6 @@ import (
 type ClientAPI struct {
 	store Store
 }
-
-/* Static Methods */
 
 func NewClientAPI(store Store) *ClientAPI {
 	return &ClientAPI{store: store}
@@ -47,13 +46,14 @@ func (api *ClientAPI) RegisterClient(c *gin.Context) {
 		return
 	}
 
+	fmt.Println("REGISTERED CLIENT WITH IP: ", clientIP)
+
 	c.JSON(http.StatusCreated, gin.H{"message": "Client registered", "ip": clientIP, "username": req.Username})
 }
 
 // GetClient handles retrieving a client by IP (GET).
 func (api *ClientAPI) GetClient(c *gin.Context) {
 	clientIP := c.ClientIP()
-
 	username, err := api.store.Read(clientIP)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
