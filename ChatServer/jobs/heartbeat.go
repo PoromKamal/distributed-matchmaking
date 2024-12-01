@@ -63,7 +63,7 @@ func (h *HeartbeatJob) Start() {
 
 // registerService sends a POST request to register the service.
 func (h *HeartbeatJob) registerService() {
-	resp, err := http.Post(h.serverURL+"/services", "application/json", nil) // Assuming no payload for now
+	resp, err := http.Post(h.serverURL+"/services", "application/json", nil) // Assumin no payload for now
 	if err != nil {
 		log.Printf("Failed to register service: %v", err)
 		return

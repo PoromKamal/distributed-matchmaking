@@ -4,6 +4,8 @@ import (
 	"chatserver/jobs"
 	"log"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -15,7 +17,22 @@ func main() {
 
 	// Start the Heartbeat job
 	heartbeat.Start()
+	// Initialize Gin router
+	r := gin.Default()
 
+	// Define a simple route to check if the server is running
+	r.GET("/ping", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"message": "pong",
+		})
+	})
+
+	// Start the Gin server on port 3000
+	go func() {
+		if err := r.Run(":3000"); err != nil {
+			log.Fatalf("Error starting server: %v", err)
+		}
+	}()
 	// Keep the application running
 	select {}
 }

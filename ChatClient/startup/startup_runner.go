@@ -21,6 +21,7 @@ func StartupClient() {
 	clearLastLine()
 	fmt.Printf("Hello, %s! Connecting to FastChat...\n", clientInstance.UserName)
 	registrationResult := <-clientInstance.Register()
+	clientInstance.Initialize()
 	clearLastLine()
 	if registrationResult {
 		fmt.Println("Connected to FastChat!")
