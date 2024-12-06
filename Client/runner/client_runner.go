@@ -30,6 +30,8 @@ var (
 	MSG_REQ_SENT   = "REQ_SENT"
 	AWAITING_REQ   = "AWAITING_REQ"
 	USER_NOT_FOUND = "USER_NOT_FOUND"
+	SERVER_ERROR   = "SERVER_ERROR"
+	REQ_ACCEPTED   = "REQ_ACCEPTED"
 )
 
 type ClientRunner interface {
@@ -161,10 +163,22 @@ func (cr *clientRunner) beginChatPage() {
 	cr.pages.AddPage("beginChat", frame, true, true)
 }
 
-func waitForRequestAccepted(accepted chan bool) {
+func waitForRequestAccepted(responseChannel chan string, accepted chan bool) {
+	// TODO: Fix DRY
 	for {
-		accepted <- false
-		time.Sleep(1 * time.Second)
+		select {
+		case response := <-responseChannel:
+			if response == REQ_ACCEPTED {
+				accepted <- true
+				return
+			} else if response == AWAITING_REQ {
+				accepted <- false
+				time.Sleep(1 * time.Second)
+			}
+		default:
+			accepted <- false
+			time.Sleep(1 * time.Second)
+		}
 	}
 }
 
@@ -182,12 +196,14 @@ func (cr *clientRunner) startMatchMaking(username string) {
 		textView.SetRegions(true).SetText(text)
 		response := <-responseChannel
 		if response == ACK_CONN {
-			text += "[green]Connected![white]\n"
+			text += " [green]Connected![white]\n"
 			textView.SetText(text)
 		} else {
 			textView.Clear()
 			textView.SetText("Failed to connect to server! [red]Please try again later")
 			cr.pages.SwitchToPage("menu")
+			// close the channel
+			close(responseChannel)
 			return
 		}
 		//time.Sleep(1 * time.Second)
@@ -195,29 +211,60 @@ func (cr *clientRunner) startMatchMaking(username string) {
 		textView.SetText(text)
 		response = <-responseChannel
 		if response == MSG_REQ_SENT {
-			text += " [green]sent![white]\n"
+			text += " [green]Sent![white]\n"
 			textView.SetText(text)
 		} else {
 			textView.Clear()
 			textView.SetText(fmt.Sprintf("[red] Failed to send chat request to %s! Please try again later", username))
 			cr.pages.SwitchToPage("menu")
+			// close the channel
+			close(responseChannel)
 			return
 		}
 
 		chatRequestAcceptedChannel := make(chan bool)
-		go waitForRequestAccepted(chatRequestAcceptedChannel)
+		go waitForRequestAccepted(responseChannel, chatRequestAcceptedChannel)
 		// Show loading bar
-		for !<-chatRequestAcceptedChannel {
-			dots := []string{".", "..", "...", "....", ".....", "......"}
-			for _, dot := range dots {
-				loadingText := fmt.Sprintf("Awaiting response%s", dot)
-				text += loadingText
-				textView.SetText(text)
-				/* Remove the added line */
-				text = text[:len(text)-len(loadingText)]
-				time.Sleep(50 * time.Millisecond)
+		terminated := false
+		dots := []string{".", "..", "...", "....", ".....", "......"}
+		dotIdx := 0
+		for !terminated {
+			select {
+			case chatAccepted := <-responseChannel:
+				// Channel value read, exit the loop
+				if chatAccepted == REQ_ACCEPTED {
+					text += "Awaiting response... [green]Chat request accepted!"
+					textView.SetText(text)
+					terminated = true
+					break
+				} else if chatAccepted == SERVER_ERROR {
+					text += "Awaiting response... [red]Chat request declined!"
+					textView.SetText(text)
+					terminated = true
+					break
+				} else if chatAccepted == AWAITING_REQ {
+					dot := dots[dotIdx]
+					loadingText := fmt.Sprintf("Awaiting response%s", dot)
+					text += loadingText
+					dotIdx++
+					if dotIdx == len(dots) {
+						dotIdx = 0
+					}
+					textView.SetText(text)
+					/* Remove the added line */
+					text = text[:len(text)-len(loadingText)]
+				}
+			default:
+				// Do nothing
+				continue
 			}
+			// debounce by 20 ms
+			//time.Sleep(20 * time.Millisecond)
 		}
+
+		// close all channels
+		close(responseChannel)
+		close(chatRequestAcceptedChannel)
 	}()
 }
 

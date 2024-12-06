@@ -14,10 +14,11 @@ type MatchmakingServer struct {
 }
 
 var (
-	ACK_CONN       = []byte("ACK")
-	MSG_REQ_SENT   = []byte("REQ_SENT")
-	AWAITING_REQ   = []byte("AWAITING_REQ")
-	USER_NOT_FOUND = []byte("USER_NOT_FOUND")
+	ACK_CONN       = []byte("ACK\n")
+	MSG_REQ_SENT   = []byte("REQ_SENT\n")
+	AWAITING_REQ   = []byte("AWAITING_REQ\n")
+	USER_NOT_FOUND = []byte("USER_NOT_FOUND\n")
+	REQ_ACCEPTED   = []byte("REQ_ACCEPTED\n")
 )
 
 // NewMatchmakingServer initializes a new matchmaking server
@@ -60,6 +61,10 @@ func AwaitingRequest(conn net.Conn) {
 
 func UserNotFound(conn net.Conn) {
 	conn.Write(USER_NOT_FOUND)
+}
+
+func RequestAccepted(conn net.Conn) {
+	conn.Write(REQ_ACCEPTED)
 }
 
 func GetRequestedUsername(conn net.Conn) string {
@@ -113,9 +118,13 @@ func (ms *MatchmakingServer) handleConnection(conn net.Conn) {
 	// Simulate it for now
 	time.Sleep(2 * time.Second)
 	RequestSent(conn)
-	for {
-		time.Sleep(3 * time.Second)
+	for i := 0; i < 7; i++ {
+		time.Sleep(1 * time.Second)
 		AwaitingRequest(conn)
+	}
+	RequestAccepted(conn)
+	for {
+		// Keep the connection open
 	}
 	// Locate the peer for the client
 	// // Keep the connection open for further communication

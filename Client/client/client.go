@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -62,8 +63,14 @@ func (c *Client) StartMatchmaking(username string, statusChannel chan string) er
 		}
 
 		message := string(buf[:n])
-		// TODO: Check the message before sending it to the channel
-		statusChannel <- message
+		// break up the messages by delimiter (newline)
+		messages := strings.Split(message, "\n")
+		for _, msg := range messages {
+			if msg == "" {
+				continue
+			}
+			statusChannel <- msg
+		}
 	}
 	//}()
 	return nil
@@ -164,6 +171,7 @@ func GetInstance() *Client {
 	}
 	return clientInstance
 }
+
 func (c *Client) Initialize() <-chan error {
 	// Create a channel to communicate the result
 	resultChan := make(chan error)
