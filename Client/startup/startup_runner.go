@@ -7,9 +7,8 @@ Responsible for starting up the client which includes:
 package startup_runner
 
 import (
-	"fastchat/client"
+	"client/client"
 	"fmt"
-	"os"
 )
 
 func StartupClient() {
@@ -20,16 +19,7 @@ func StartupClient() {
 	clearLastLine()
 	clearLastLine()
 	fmt.Printf("Hello, %s! Connecting to FastChat...\n", clientInstance.UserName)
-	registrationResult := <-clientInstance.Register()
-	clientInstance.Initialize()
-	clearLastLine()
-	if registrationResult {
-		fmt.Println("Connected to FastChat!")
-	} else {
-		fmt.Println("Failed to connect to FastChat!")
-		os.Exit(1)
-	}
-	clientInstance.StartMatchmaking()
+
 }
 
 func clearLastLine() {

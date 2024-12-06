@@ -2,8 +2,8 @@ package client
 
 import (
 	"bytes"
+	"client/service"
 	"encoding/json"
-	"fastchat/service"
 	"fmt"
 	"io"
 	"math"
@@ -99,7 +99,6 @@ func pingServer(serverIP string) (float32, error) {
 
 // StartPingJob starts a background job to ping servers and update the registry.
 func (c *Client) startPingJob(interval time.Duration) {
-	fmt.Println("POROMK MALA")
 	ticker := time.NewTicker(interval)
 	go func() {
 		for {
@@ -129,6 +128,27 @@ func (c *Client) updateServerDelays() {
 	}
 }
 
+func GetClient() *Client {
+	if clientInstance == nil {
+		lock.Lock()
+		defer lock.Unlock()
+		if clientInstance == nil {
+			// Basic initialization without network calls
+			url, err := readConfig("client/config.txt")
+			if err != nil {
+				fmt.Printf("Error reading config: %v\n", err)
+				return nil
+			}
+			clientInstance = &Client{
+				CentralURL:        url,
+				ServerRegistry:    make(map[string]float32), // Empty for now
+				serverRegistryAPI: service.NewCentralServerRegistry(url),
+			}
+		}
+	}
+	return clientInstance
+}
+
 func GetInstance() *Client {
 	if clientInstance == nil {
 		lock.Lock()
@@ -140,47 +160,62 @@ func GetInstance() *Client {
 				fmt.Printf("Error reading config: %v\n", err)
 				return nil
 			}
-
 			clientInstance = &Client{
 				CentralURL:        url,
 				ServerRegistry:    make(map[string]float32), // Empty for now
 				serverRegistryAPI: service.NewCentralServerRegistry(url),
 			}
+			registrationResult := <-clientInstance.Register()
+			if registrationResult != nil {
+				fmt.Println("Failed to register with Central!")
+				os.Exit(1)
+			}
+			clientInstance.Initialize()
 		}
 	}
 	return clientInstance
 }
+func (c *Client) Initialize() <-chan error {
+	// Create a channel to communicate the result
+	resultChan := make(chan error)
 
-func (c *Client) Initialize() error {
-	// Create a channel to receive the servers or error
-	serverChan := make(chan []string)
-	errorChan := make(chan error)
-
-	// Fetch servers asynchronously in a goroutine
+	// Start the initialization in a goroutine
 	go func() {
-		servers, err := c.serverRegistryAPI.GetServers()
-		fmt.Print(servers)
-		if err != nil {
-			errorChan <- fmt.Errorf("failed to initialize client: %w", err)
-			return
+		// Create channels for server fetching
+		serverChan := make(chan []string)
+		errorChan := make(chan error)
+
+		// Fetch servers asynchronously
+		go func() {
+			servers, err := c.serverRegistryAPI.GetServers()
+			if err != nil {
+				errorChan <- fmt.Errorf("failed to initialize client: %w", err)
+				return
+			}
+			serverChan <- servers
+		}()
+
+		// Wait for either servers or an error
+		select {
+		case servers := <-serverChan:
+			// Populate ServerRegistry with initial values
+			for _, server := range servers {
+				c.ServerRegistry[server] = math.MaxFloat32
+			}
+			// Start the ping job
+			c.startPingJob(10 * time.Second)
+			// Signal success
+			resultChan <- nil
+		case err := <-errorChan:
+			// Signal failure
+			resultChan <- err
 		}
-		serverChan <- servers
+
+		// Close the result channel
+		close(resultChan)
 	}()
 
-	// Wait for either servers or an error
-	select {
-	case servers := <-serverChan:
-		// Populate ServerRegistry with initial values
-		for _, server := range servers {
-			c.ServerRegistry[server] = math.MaxFloat32
-		}
-		// Start the ping job
-		c.startPingJob(10 * time.Second)
-		return nil
-	case err := <-errorChan:
-		// Handle any error that occurred during the async GetServers call
-		return err
-	}
+	return resultChan
 }
 
 // ReadConfig reads the central server URL from a configuration file
@@ -199,8 +234,8 @@ func readConfig(configFile string) (string, error) {
 }
 
 // Register sends the username to the central server's register endpoint
-func (c *Client) Register() <-chan bool {
-	result := make(chan bool)
+func (c *Client) Register() <-chan error {
+	result := make(chan error)
 	go func() {
 		defer close(result)
 
@@ -211,33 +246,33 @@ func (c *Client) Register() <-chan bool {
 		payload := map[string]string{"username": c.UserName}
 		jsonPayload, err := json.Marshal(payload)
 		if err != nil {
-			fmt.Printf("Error marshaling payload: %v\n", err)
-			result <- false
+			//fmt.Printf("Error marshaling payload: %v\n", err)
+			result <- err
 			return
 		}
 
 		// Make the POST request to the central server
 		resp, err := http.Post(fmt.Sprintf("%s/clients", url), "application/json", bytes.NewBuffer(jsonPayload))
 		if err != nil {
-			fmt.Printf("Error sending POST request: %v\n", err)
-			result <- false
+			//fmt.Printf("Error sending POST request: %v\n", err)
+			result <- err
 			return
 		}
 		defer resp.Body.Close()
 
 		// Handle the response, we are ok with conflict.
 		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
-			body, _ := io.ReadAll(resp.Body)
-			fmt.Printf("Server returned error: %s\n", string(body))
-			result <- false
+			//body, _ := io.ReadAll(resp.Body)
+			//fmt.Printf("Server returned error: %s\n", string(body))
+			result <- fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 			return
 		}
 
-		body, _ := io.ReadAll(resp.Body)
+		//body, _ := io.ReadAll(resp.Body)
 
-		fmt.Println("Successfully registered with Central!")
-		fmt.Println(string(body))
-		result <- true
+		//fmt.Println("Successfully registered with Central!")
+		//fmt.Println(string(body))
+		result <- nil
 	}()
 	return result
 }

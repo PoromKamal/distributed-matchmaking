@@ -44,9 +44,6 @@ func (c *CentralServerRegistry) GetServers() ([]string, error) {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Debugging output: printing the raw JSON
-	fmt.Println("Raw response body:", string(body))
-
 	// Parse the JSON response into the struct
 	var response ServicesResponse
 	if err := json.Unmarshal(body, &response); err != nil {
