@@ -126,24 +126,4 @@ func (ms *MatchmakingServer) handleConnection(conn net.Conn) {
 	for {
 		// Keep the connection open
 	}
-	// Locate the peer for the client
-	// // Keep the connection open for further communication
-	// for {
-	// 	// Handle incoming messages from the client
-	// 	buf := make([]byte, 1024)
-	// 	n, err := conn.Read(buf)
-	// 	if err != nil {
-	// 		log.Printf("Connection with client %s closed: %v\n", clientIP, err)
-	// 		break
-	// 	}
-
-	// 	message := strings.TrimSpace(string(buf[:n]))
-	// 	log.Printf("Received message from %s: %s\n", clientIP, message)
-
-	// 	if message == "exit" {
-	// 		log.Printf("Client %s disconnected\n", clientIP)
-	// 		break
-	// 	}
-	// 	conn.Write([]byte("Message received\n"))
-	// }
 }
