@@ -6,11 +6,19 @@ import (
 	"log"
 	"net"
 	"strings"
+	"time"
 )
 
 type MatchmakingServer struct {
 	clientStore client.Store
 }
+
+var (
+	ACK_CONN       = []byte("ACK")
+	MSG_REQ_SENT   = []byte("REQ_SENT")
+	AWAITING_REQ   = []byte("AWAITING_REQ")
+	USER_NOT_FOUND = []byte("USER_NOT_FOUND")
+)
 
 // NewMatchmakingServer initializes a new matchmaking server
 func NewMatchmakingServer(store client.Store) *MatchmakingServer {
@@ -28,7 +36,6 @@ func (ms *MatchmakingServer) Start(address string) error {
 	fmt.Printf("Matchmaking server listening on %s...\n", address)
 
 	for {
-		fmt.Println("POROMKAMAL")
 		conn, err := listener.Accept()
 		if err != nil {
 			fmt.Printf("Failed to accept connection: %v\n", err)
@@ -37,6 +44,32 @@ func (ms *MatchmakingServer) Start(address string) error {
 
 		go ms.handleConnection(conn)
 	}
+}
+
+func AcknowledgeConnection(conn net.Conn) {
+	conn.Write(ACK_CONN)
+}
+
+func RequestSent(conn net.Conn) {
+	conn.Write(MSG_REQ_SENT)
+}
+
+func AwaitingRequest(conn net.Conn) {
+	conn.Write(AWAITING_REQ)
+}
+
+func UserNotFound(conn net.Conn) {
+	conn.Write(USER_NOT_FOUND)
+}
+
+func GetRequestedUsername(conn net.Conn) string {
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		log.Printf("Failed to read from connection: %v\n", err)
+		return ""
+	}
+	return strings.TrimSpace(string(buf[:n]))
 }
 
 // handleConnection processes an individual client connection
@@ -53,7 +86,7 @@ func (ms *MatchmakingServer) handleConnection(conn net.Conn) {
 		clientIP = strings.Split(clientAddr, ":")[0]
 	}
 
-	fmt.Println("THE CLIENT IP IS: " + clientIP)
+	fmt.Println("Client with IP: " + clientIP + " connected")
 
 	// Check if the client IP is registered
 	username, err := ms.clientStore.Read(clientIP)
@@ -69,27 +102,39 @@ func (ms *MatchmakingServer) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// Acknowledge connection
-	log.Printf("Client %s connected successfully\n", clientIP)
-	conn.Write([]byte("Welcome to matchmaking!\n"))
-
-	// Keep the connection open for further communication
-	for {
-		// Handle incoming messages from the client
-		buf := make([]byte, 1024)
-		n, err := conn.Read(buf)
-		if err != nil {
-			log.Printf("Connection with client %s closed: %v\n", clientIP, err)
-			break
-		}
-
-		message := strings.TrimSpace(string(buf[:n]))
-		log.Printf("Received message from %s: %s\n", clientIP, message)
-
-		if message == "exit" {
-			log.Printf("Client %s disconnected\n", clientIP)
-			break
-		}
-		conn.Write([]byte("Message received\n"))
+	// Requested username from client
+	req_user := GetRequestedUsername(conn)
+	fmt.Println("Requested username: " + req_user)
+	if req_user == "" {
+		UserNotFound(conn)
+		return
 	}
+	AcknowledgeConnection(conn)
+	// Simulate it for now
+	time.Sleep(2 * time.Second)
+	RequestSent(conn)
+	for {
+		time.Sleep(3 * time.Second)
+		AwaitingRequest(conn)
+	}
+	// Locate the peer for the client
+	// // Keep the connection open for further communication
+	// for {
+	// 	// Handle incoming messages from the client
+	// 	buf := make([]byte, 1024)
+	// 	n, err := conn.Read(buf)
+	// 	if err != nil {
+	// 		log.Printf("Connection with client %s closed: %v\n", clientIP, err)
+	// 		break
+	// 	}
+
+	// 	message := strings.TrimSpace(string(buf[:n]))
+	// 	log.Printf("Received message from %s: %s\n", clientIP, message)
+
+	// 	if message == "exit" {
+	// 		log.Printf("Client %s disconnected\n", clientIP)
+	// 		break
+	// 	}
+	// 	conn.Write([]byte("Message received\n"))
+	// }
 }

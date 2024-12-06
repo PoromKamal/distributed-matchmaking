@@ -25,6 +25,18 @@ var options = []string{
 	"2. View chat requests",
 }
 
+var (
+	ACK_CONN       = "ACK"
+	MSG_REQ_SENT   = "REQ_SENT"
+	AWAITING_REQ   = "AWAITING_REQ"
+	USER_NOT_FOUND = "USER_NOT_FOUND"
+)
+
+var (
+	app   *tview.Application
+	pages *tview.Pages
+)
+
 type ClientRunner interface {
 	Start()
 }
@@ -38,10 +50,15 @@ func NewClientRunner() ClientRunner {
 }
 
 func (cr *clientRunner) Start() {
+	app := tview.NewApplication()
+	pages = tview.NewPages()
 	cr.startup()
 	cr.drawMenu()
+
+	app.SetRoot(pages, true).Run()
 }
 
+// Deprecate after migrating everything to Tview
 func clearTerminal() {
 	// Check the operating system
 	if runtime.GOOS == "windows" {
@@ -55,6 +72,7 @@ func clearTerminal() {
 	}
 }
 
+// Deprecate after migrating everything to Tview
 func (cr *clientRunner) showLoadingBarWithInitialization(task string, initFunc func() <-chan error) error {
 	// Call the initialization function and get the result channel
 	resultChan := initFunc()
@@ -89,6 +107,7 @@ func (cr *clientRunner) showLoadingBarWithInitialization(task string, initFunc f
 	}
 }
 
+// Deprecate after migrating everything to Tview
 func (cr *clientRunner) startup() {
 	clearTerminal() // Clear terminal before showing the message
 	fmt.Println(string(blue) + "Welcome to Low Latency Chat!" + reset)
@@ -116,17 +135,75 @@ func (cr *clientRunner) startup() {
 func (cr *clientRunner) drawMenu() {
 	app := tview.NewApplication()
 	list := tview.NewList().
-		AddItem(options[0], "Begin a chat with another user!", 'a', nil).
+		AddItem(options[0], "Begin a chat with another user!", 'a', cr.beginChatPage).
 		AddItem(options[1], "View your incoming message requests!", 'b', nil).
 		AddItem("Quit", "Press to exit", 'q', func() {
 			app.Stop()
 			os.Exit(0)
 		})
-	if err := app.SetRoot(list, true).SetFocus(list).Run(); err != nil {
-		panic(err)
-	}
+	frame := tview.NewFrame(list).SetBorders(0, 0, 0, 0, 0, 0)
+	frame.SetTitle("Main Menu").SetTitleAlign(tview.AlignCenter)
+	frame.SetBorder(true)
+	pages.AddPage("menu", frame, true, true)
+}
+
+func (cr *clientRunner) beginChatPage() {
+	usernameInput := tview.NewInputField().SetLabel("Enter username: ").SetFieldWidth(30).SetFieldBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+	frame := tview.NewFrame(tview.NewForm().
+		AddFormItem(usernameInput).
+		AddButton("Begin Chat", func() {
+			// Begin chat logic
+			cr.startMatchMaking(usernameInput.GetText())
+		},
+		).
+		AddButton("Back", func() {
+			pages.SwitchToPage("menu")
+		},
+		))
+	frame.SetTitle("Begin Chat").SetTitleAlign(tview.AlignCenter)
+	frame.SetBorder(true)
+	pages.AddPage("beginChat", frame, true, true)
+}
+
+func (cr *clientRunner) startMatchMaking(username string) {
+	textView := tview.NewTextView()
+	frame := tview.NewFrame(textView)
+	frame.SetTitle("Matchmaking").SetTitleAlign(tview.AlignCenter)
+	frame.SetBorder(true)
+	pages.AddAndSwitchToPage("matchmaking", frame, true)
+	responseChannel := make(chan string)
+	go cr.client.StartMatchmaking(username, responseChannel) // Make sure to run this in a goroutine
+	go func() {
+		text := ""
+		text += "Waiting for server..."
+		textView.SetRegions(true).SetText(text)
+		response := <-responseChannel
+		if response == ACK_CONN {
+			text += "[green]Connected![white]\n"
+			textView.SetText(text)
+		} else {
+			textView.Clear()
+			textView.SetText("Failed to connect to server! [red]Please try again later")
+			pages.SwitchToPage("menu")
+			return
+		}
+		//time.Sleep(1 * time.Second)
+		text += fmt.Sprintf("Sending chat request to %s...", username)
+		textView.SetText(text)
+		response = <-responseChannel
+		if response == MSG_REQ_SENT {
+			text += " [green]sent![white]\n"
+			textView.SetText(text)
+		} else {
+			textView.Clear()
+			textView.SetText(fmt.Sprintf("[red] Failed to send chat request to %s! Please try again later", username))
+			pages.SwitchToPage("menu")
+			return
+		}
+	}()
 }
 
 func (cr *clientRunner) showOptions() {
 	cr.drawMenu()
+	cr.beginChatPage()
 }

@@ -24,59 +24,45 @@ type Client struct {
 var lock = &sync.Mutex{}
 var clientInstance *Client
 
-func (c *Client) StartMatchmaking() error {
+var (
+	ACK_CONN       = "ACK"
+	MSG_REQ_SENT   = "REQ_SENT"
+	AWAITING_REQ   = "AWAITING_REQ"
+	USER_NOT_FOUND = "USER_NOT_FOUND"
+)
+
+func (c *Client) StartMatchmaking(username string, statusChannel chan string) error {
 	conn, err := net.Dial("tcp", "localhost:8081") // Establish a connection to the matchmaking server
-	fmt.Println(err)
 	if err != nil {
 		return fmt.Errorf("failed to connect to matchmaking server: %w", err)
 	}
 	defer conn.Close()
 
-	fmt.Printf("Connected to matchmaking server at %s\n", c.CentralURL)
-
 	// Send initial message to the server
-	initialMessage := fmt.Sprintf("Hello, this is %s\n", c.UserName)
-	_, err = conn.Write([]byte(initialMessage))
+	_, err = conn.Write([]byte(username))
 	if err != nil {
 		return fmt.Errorf("failed to send initial message: %w", err)
 	}
 
 	// Continuously read messages from the server
-	go func() {
-		for {
-			buf := make([]byte, 1024)
-			n, err := conn.Read(buf)
-			if err != nil {
-				if err == io.EOF {
-					fmt.Println("Connection closed by server.")
-				} else {
-					fmt.Printf("Error reading from server: %v\n", err)
-				}
-				break
-			}
-
-			message := string(buf[:n])
-			fmt.Printf("Message from server: %s\n", message)
-		}
-	}()
-
-	// Allow the client to send messages to the server interactively
+	// go func() {
 	for {
-		fmt.Print("Enter message (type 'exit' to quit): ")
-		var input string
-		fmt.Scanln(&input)
-
-		if input == "exit" {
-			fmt.Println("Exiting matchmaking...")
+		buf := make([]byte, 1024)
+		n, err := conn.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				fmt.Println("Connection closed by server.")
+			} else {
+				fmt.Printf("Error reading from server: %v\n", err)
+			}
 			break
 		}
 
-		_, err := conn.Write([]byte(input + "\n"))
-		if err != nil {
-			return fmt.Errorf("failed to send message: %w", err)
-		}
+		message := string(buf[:n])
+		// TODO: Check the message before sending it to the channel
+		statusChannel <- message
 	}
-
+	//}()
 	return nil
 }
 
@@ -195,19 +181,15 @@ func (c *Client) Initialize() <-chan error {
 			serverChan <- servers
 		}()
 
-		// Wait for either servers or an error
+		// Logic a bit sketchy
 		select {
 		case servers := <-serverChan:
-			// Populate ServerRegistry with initial values
 			for _, server := range servers {
 				c.ServerRegistry[server] = math.MaxFloat32
 			}
-			// Start the ping job
 			c.startPingJob(10 * time.Second)
-			// Signal success
 			resultChan <- nil
 		case err := <-errorChan:
-			// Signal failure
 			resultChan <- err
 		}
 
