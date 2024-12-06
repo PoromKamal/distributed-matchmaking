@@ -32,30 +32,27 @@ var (
 	USER_NOT_FOUND = "USER_NOT_FOUND"
 )
 
-var (
-	app   *tview.Application
-	pages *tview.Pages
-)
-
 type ClientRunner interface {
 	Start()
 }
 
 type clientRunner struct {
 	client *client.Client
+	app    *tview.Application
+	pages  *tview.Pages
 }
 
 func NewClientRunner() ClientRunner {
-	return &clientRunner{client.GetClient()}
+	return &clientRunner{client: client.GetClient()}
 }
 
 func (cr *clientRunner) Start() {
-	app := tview.NewApplication()
-	pages = tview.NewPages()
+	cr.app = tview.NewApplication()
+	cr.pages = tview.NewPages()
 	cr.startup()
 	cr.drawMenu()
 
-	app.SetRoot(pages, true).Run()
+	cr.app.SetRoot(cr.pages, true).Run()
 }
 
 // Deprecate after migrating everything to Tview
@@ -133,18 +130,17 @@ func (cr *clientRunner) startup() {
 }
 
 func (cr *clientRunner) drawMenu() {
-	app := tview.NewApplication()
 	list := tview.NewList().
 		AddItem(options[0], "Begin a chat with another user!", 'a', cr.beginChatPage).
 		AddItem(options[1], "View your incoming message requests!", 'b', nil).
 		AddItem("Quit", "Press to exit", 'q', func() {
-			app.Stop()
+			cr.app.Stop()
 			os.Exit(0)
 		})
 	frame := tview.NewFrame(list).SetBorders(0, 0, 0, 0, 0, 0)
 	frame.SetTitle("Main Menu").SetTitleAlign(tview.AlignCenter)
 	frame.SetBorder(true)
-	pages.AddPage("menu", frame, true, true)
+	cr.pages.AddPage("menu", frame, true, true)
 }
 
 func (cr *clientRunner) beginChatPage() {
@@ -157,20 +153,27 @@ func (cr *clientRunner) beginChatPage() {
 		},
 		).
 		AddButton("Back", func() {
-			pages.SwitchToPage("menu")
+			cr.pages.SwitchToPage("menu")
 		},
 		))
 	frame.SetTitle("Begin Chat").SetTitleAlign(tview.AlignCenter)
 	frame.SetBorder(true)
-	pages.AddPage("beginChat", frame, true, true)
+	cr.pages.AddPage("beginChat", frame, true, true)
+}
+
+func waitForRequestAccepted(accepted chan bool) {
+	for {
+		accepted <- false
+		time.Sleep(1 * time.Second)
+	}
 }
 
 func (cr *clientRunner) startMatchMaking(username string) {
-	textView := tview.NewTextView()
+	textView := tview.NewTextView().SetChangedFunc(func() { cr.app.Draw() })
 	frame := tview.NewFrame(textView)
 	frame.SetTitle("Matchmaking").SetTitleAlign(tview.AlignCenter)
 	frame.SetBorder(true)
-	pages.AddAndSwitchToPage("matchmaking", frame, true)
+	cr.pages.AddAndSwitchToPage("matchmaking", frame, true)
 	responseChannel := make(chan string)
 	go cr.client.StartMatchmaking(username, responseChannel) // Make sure to run this in a goroutine
 	go func() {
@@ -184,7 +187,7 @@ func (cr *clientRunner) startMatchMaking(username string) {
 		} else {
 			textView.Clear()
 			textView.SetText("Failed to connect to server! [red]Please try again later")
-			pages.SwitchToPage("menu")
+			cr.pages.SwitchToPage("menu")
 			return
 		}
 		//time.Sleep(1 * time.Second)
@@ -197,8 +200,23 @@ func (cr *clientRunner) startMatchMaking(username string) {
 		} else {
 			textView.Clear()
 			textView.SetText(fmt.Sprintf("[red] Failed to send chat request to %s! Please try again later", username))
-			pages.SwitchToPage("menu")
+			cr.pages.SwitchToPage("menu")
 			return
+		}
+
+		chatRequestAcceptedChannel := make(chan bool)
+		go waitForRequestAccepted(chatRequestAcceptedChannel)
+		// Show loading bar
+		for !<-chatRequestAcceptedChannel {
+			dots := []string{".", "..", "...", "....", ".....", "......"}
+			for _, dot := range dots {
+				loadingText := fmt.Sprintf("Awaiting response%s", dot)
+				text += loadingText
+				textView.SetText(text)
+				/* Remove the added line */
+				text = text[:len(text)-len(loadingText)]
+				time.Sleep(50 * time.Millisecond)
+			}
 		}
 	}()
 }

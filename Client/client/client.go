@@ -29,11 +29,13 @@ var (
 	MSG_REQ_SENT   = "REQ_SENT"
 	AWAITING_REQ   = "AWAITING_REQ"
 	USER_NOT_FOUND = "USER_NOT_FOUND"
+	SERVER_ERROR   = "SERVER_ERROR"
 )
 
 func (c *Client) StartMatchmaking(username string, statusChannel chan string) error {
 	conn, err := net.Dial("tcp", "localhost:8081") // Establish a connection to the matchmaking server
 	if err != nil {
+		statusChannel <- SERVER_ERROR
 		return fmt.Errorf("failed to connect to matchmaking server: %w", err)
 	}
 	defer conn.Close()
@@ -41,6 +43,7 @@ func (c *Client) StartMatchmaking(username string, statusChannel chan string) er
 	// Send initial message to the server
 	_, err = conn.Write([]byte(username))
 	if err != nil {
+		statusChannel <- SERVER_ERROR
 		return fmt.Errorf("failed to send initial message: %w", err)
 	}
 
