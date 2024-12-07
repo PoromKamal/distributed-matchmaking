@@ -118,11 +118,13 @@ func (cr *clientRunner) startup() {
 	err := cr.showLoadingBarWithInitialization("Registering", cr.client.Register)
 	if err != nil {
 		fmt.Println(string(red) + "Failed to register client. Please try again later." + reset)
+		os.Exit(1)
 		return
 	}
 	err = cr.showLoadingBarWithInitialization("Fetching Servers", cr.client.Initialize)
 	if err != nil {
 		fmt.Println(string(red) + "Failed to fetch servers. Please try again later." + reset)
+		os.Exit(1)
 		return
 	}
 	time.Sleep(1 * time.Second)
