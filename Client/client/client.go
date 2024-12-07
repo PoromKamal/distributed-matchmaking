@@ -16,10 +16,11 @@ import (
 )
 
 type Client struct {
-	UserName          string
-	CentralURL        string
-	serverRegistryAPI service.ServerRegistryAPI
-	ServerRegistry    map[string]float32
+	UserName              string
+	CentralURL            string
+	serverRegistryAPI     service.ServerRegistryAPI
+	ServerRegistry        map[string]float32
+	messageRequestChannel chan string
 }
 
 var lock = &sync.Mutex{}
@@ -31,6 +32,7 @@ var (
 	AWAITING_REQ   = "AWAITING_REQ"
 	USER_NOT_FOUND = "USER_NOT_FOUND"
 	SERVER_ERROR   = "SERVER_ERROR"
+	ACCEPT_REQ     = "ACCEPT_REQ"
 )
 
 func (c *Client) StartMatchmaking(username string, statusChannel chan string) error {
@@ -140,9 +142,10 @@ func GetClient() *Client {
 				return nil
 			}
 			clientInstance = &Client{
-				CentralURL:        url,
-				ServerRegistry:    make(map[string]float32), // Empty for now
-				serverRegistryAPI: service.NewCentralServerRegistry(url),
+				CentralURL:            url,
+				ServerRegistry:        make(map[string]float32), // Empty for now
+				serverRegistryAPI:     service.NewCentralServerRegistry(url),
+				messageRequestChannel: make(chan string),
 			}
 		}
 	}
@@ -176,12 +179,39 @@ func GetInstance() *Client {
 	return clientInstance
 }
 
-func handleConnection(conn net.Conn){
+func handleChatRequest(conn net.Conn) {
+	// Read the username from the connection
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		fmt.Printf("Failed to read from connection: %v\n", err)
+		os.Exit(1) // blow up for now
+	}
+	username := string(buf[:n])
+	clientInstance.messageRequestChannel <- username
+	for {
+		// just loop forever for now
+	}
+	// // send a ACCEPT_REQ message to Central
+	// _, err := conn.Write([]byte(ACCEPT_REQ + "\n"))
+	// if err != nil {
+	// 	fmt.Printf("Failed to send ACCEPT_REQ message: %v\n", err)
+	// 	os.Exit(1) // let's just blow up for now
+	// }
 
+	// // Wait for server to send you an chat server to connect to
+	// buf := make([]byte, 1024)
+	// n, err := conn.Read(buf)
+	// if err != nil {
+	// 	fmt.Printf("Failed to read server: %v\n", err)
+	// 	os.Exit(1) // let's just blow up for now
+	// }
+	// serverAddress := string(buf[:n])
+	// return serverAddress // return for now
 }
 
 // Listen for message requests on port 3001
-func messageRequestListener(){
+func messageRequestListener() {
 	listener, err := net.Listen("tcp", ":3001")
 	if err != nil {
 		fmt.Println("failed to start message request listener: %w", err)
@@ -195,14 +225,14 @@ func messageRequestListener(){
 			//fmt.Printf("Failed to accept connection: %v\n", err)
 			continue
 		}
-		go handleConnection(conn)
+		go handleChatRequest(conn)
 	}
 }
 
 func (c *Client) Initialize() <-chan error {
 	// Create a channel to communicate the result
 	resultChan := make(chan error)
-
+	go messageRequestListener()
 	// Start the initialization in a goroutine
 	go func() {
 		// Create channels for server fetching

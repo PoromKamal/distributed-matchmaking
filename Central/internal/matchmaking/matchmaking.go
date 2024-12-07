@@ -19,6 +19,7 @@ var (
 	AWAITING_REQ   = []byte("AWAITING_REQ\n")
 	USER_NOT_FOUND = []byte("USER_NOT_FOUND\n")
 	REQ_ACCEPTED   = []byte("REQ_ACCEPTED\n")
+	ACCEPT_REQ     = []byte("ACCEPT_REQ")
 )
 
 // NewMatchmakingServer initializes a new matchmaking server
@@ -77,6 +78,42 @@ func GetRequestedUsername(conn net.Conn) string {
 	return strings.TrimSpace(string(buf[:n]))
 }
 
+func (ms *MatchmakingServer) requestMatch(username string, req_user_ip string, requestChannel chan string) {
+	// hack for local testing
+	if req_user_ip == "::1" {
+		req_user_ip = "localhost"
+	}
+	conn, err := net.Dial("tcp", req_user_ip+":3001")
+	if err != nil {
+		log.Printf("Failed to connect to client: %v\n", err)
+		return
+	}
+	defer conn.Close()
+
+	// Send the request to the client, with the requesters username
+	_, err = conn.Write([]byte(username + "\n"))
+	if err != nil {
+		log.Printf("Failed to send request to client: %v\n", err)
+		return
+	}
+
+	// Listen for a response from the client
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		log.Printf("Failed to read response from client: %v\n", err)
+		return
+	}
+	response_raw := string(buf[:n])
+	if response_raw == string(ACCEPT_REQ) {
+		// Match accepted
+		requestChannel <- string(ACCEPT_REQ)
+	} else {
+		// Match declined
+		requestChannel <- "Match declined"
+	}
+}
+
 // handleConnection processes an individual client connection
 func (ms *MatchmakingServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
@@ -117,12 +154,33 @@ func (ms *MatchmakingServer) handleConnection(conn net.Conn) {
 	AcknowledgeConnection(conn)
 	// Simulate it for now
 	time.Sleep(2 * time.Second)
-	RequestSent(conn)
-	for i := 0; i < 7; i++ {
-		time.Sleep(1 * time.Second)
-		AwaitingRequest(conn)
+	req_user_ip, err := ms.clientStore.ReadByUsername(req_user)
+	if err != nil {
+		UserNotFound(conn)
+		return
 	}
-	RequestAccepted(conn)
+
+	requestChannel := make(chan string)
+	go ms.requestMatch(username, req_user_ip, requestChannel)
+	RequestSent(conn)
+loop:
+	for {
+		select {
+		case result := <-requestChannel:
+			if result == string(ACCEPT_REQ) {
+				RequestAccepted(conn)
+				break loop
+			} else {
+				UserNotFound(conn)
+				break loop
+			}
+		default:
+			AwaitingRequest(conn)
+		}
+		// Debounce the loop by 50 ms
+		time.Sleep(50 * time.Millisecond)
+	}
+
 	for {
 		// Keep the connection open
 	}
