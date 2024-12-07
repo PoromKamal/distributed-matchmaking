@@ -32,6 +32,7 @@ var (
 	USER_NOT_FOUND = "USER_NOT_FOUND"
 	SERVER_ERROR   = "SERVER_ERROR"
 	REQ_ACCEPTED   = "REQ_ACCEPTED"
+	ACCEPT_REQ     = "ACCEPT_REQ"
 )
 
 type ClientRunner interface {
@@ -133,10 +134,48 @@ func (cr *clientRunner) startup() {
 	clearTerminal()
 }
 
+func (cr *clientRunner) acceptChatRequest(username string) {
+	textView := tview.NewTextView().SetChangedFunc(func() { cr.app.Draw() }).SetRegions(true)
+	frame := tview.NewFrame(textView)
+	frame.SetTitle(fmt.Sprintf("Accepting Chat Request with %s", username)).SetTitleAlign(tview.AlignCenter)
+	frame.SetBorder(true)
+	cr.pages.AddAndSwitchToPage("acceptingChatRequest", frame, true)
+	go func() {
+		statusChannel := make(chan string)
+		defer close(statusChannel)
+
+		go cr.client.AcceptMessageRequest(username, statusChannel)
+
+		text := fmt.Sprintf("Accepting request from %s... ", username)
+		textView.SetText(text)
+		response := <-statusChannel
+		if response == ACCEPT_REQ {
+			text += "[green]Accepted![white]\n"
+			textView.SetText(text)
+		} else {
+			textView.SetText("[red]Chat request declined! [red]You cannot chat with " + username + "[white]")
+			time.Sleep(1 * time.Second)
+			cr.pages.SwitchToPage("menu")
+			return
+		}
+		text += "Awaiting for server matchmaking..."
+		textView.SetText(text)
+		response = <-statusChannel
+		if response == SERVER_ERROR {
+			textView.SetText("[red]Failed to connect to server! Please try again later.")
+			time.Sleep(1 * time.Second)
+			cr.pages.SwitchToPage("menu")
+			return
+		}
+		text += "[green]Connected![white]\n"
+		textView.SetText(text)
+	}()
+}
+
 func (cr *clientRunner) drawMenu() {
 	list := tview.NewList().
 		AddItem(options[0], "Begin a chat with another user!", 'a', cr.beginChatPage).
-		AddItem(options[1], "View your incoming message requests!", 'b', nil).
+		AddItem(options[1], "View your incoming message requests!", 'b', cr.beginChatRequestPage).
 		AddItem("Quit", "Press to exit", 'q', func() {
 			cr.app.Stop()
 			os.Exit(0)
@@ -145,6 +184,20 @@ func (cr *clientRunner) drawMenu() {
 	frame.SetTitle("Main Menu").SetTitleAlign(tview.AlignCenter)
 	frame.SetBorder(true)
 	cr.pages.AddPage("menu", frame, true, true)
+}
+
+func (cr *clientRunner) beginChatRequestPage() {
+	list := tview.NewList()
+	list.AddItem("Back", "", 'q', func() {
+		cr.pages.SwitchToPage("menu")
+	})
+	for username := range cr.client.ChatRequests {
+		list.AddItem("Chat Request from: "+username, "", 0, func() { cr.acceptChatRequest(username) })
+	}
+	frame := tview.NewFrame(list).SetBorders(0, 0, 0, 0, 0, 0)
+	frame.SetTitle("").SetTitleAlign(tview.AlignCenter)
+	frame.SetBorder(true)
+	cr.pages.AddAndSwitchToPage("chatRequests", frame, true)
 }
 
 func (cr *clientRunner) beginChatPage() {
@@ -162,26 +215,7 @@ func (cr *clientRunner) beginChatPage() {
 		))
 	frame.SetTitle("Begin Chat").SetTitleAlign(tview.AlignCenter)
 	frame.SetBorder(true)
-	cr.pages.AddPage("beginChat", frame, true, true)
-}
-
-func waitForRequestAccepted(responseChannel chan string, accepted chan bool) {
-	// TODO: Fix DRY
-	for {
-		select {
-		case response := <-responseChannel:
-			if response == REQ_ACCEPTED {
-				accepted <- true
-				return
-			} else if response == AWAITING_REQ {
-				accepted <- false
-				time.Sleep(1 * time.Second)
-			}
-		default:
-			accepted <- false
-			time.Sleep(1 * time.Second)
-		}
-	}
+	cr.pages.AddAndSwitchToPage("beginChat", frame, true)
 }
 
 func (cr *clientRunner) startMatchMaking(username string) {
@@ -236,7 +270,6 @@ func (cr *clientRunner) startMatchMaking(username string) {
 					text += "Awaiting response... [green]Chat request accepted!"
 					textView.SetText(text)
 					terminated = true
-					break
 				} else if chatAccepted == SERVER_ERROR {
 					text += "Awaiting response... [red]Chat request declined!"
 					textView.SetText(text)
@@ -253,6 +286,8 @@ func (cr *clientRunner) startMatchMaking(username string) {
 					textView.SetText(text)
 					/* Remove the added line */
 					text = text[:len(text)-len(loadingText)]
+				} else {
+					textView.SetText("I HAVE NO IDEA WHAT JUST HAPPENED, here's what the server sent back: " + chatAccepted)
 				}
 			default:
 				// Do nothing
@@ -265,9 +300,4 @@ func (cr *clientRunner) startMatchMaking(username string) {
 		// close all channels
 		close(responseChannel)
 	}()
-}
-
-func (cr *clientRunner) showOptions() {
-	cr.drawMenu()
-	cr.beginChatPage()
 }

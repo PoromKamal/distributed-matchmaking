@@ -78,21 +78,11 @@ func GetRequestedUsername(conn net.Conn) string {
 	return strings.TrimSpace(string(buf[:n]))
 }
 
-func (ms *MatchmakingServer) requestMatch(username string, req_user_ip string, requestChannel chan string) {
-	// hack for local testing
-	if req_user_ip == "::1" {
-		req_user_ip = "localhost"
-	}
-	conn, err := net.Dial("tcp", req_user_ip+":3001")
-	if err != nil {
-		log.Printf("Failed to connect to client: %v\n", err)
-		return
-	}
-	defer conn.Close()
-
+func (ms *MatchmakingServer) requestMatch(username string, conn net.Conn, requestChannel chan string) {
 	// Send the request to the client, with the requesters username
-	_, err = conn.Write([]byte(username + "\n"))
+	_, err := conn.Write([]byte(username + "\n"))
 	if err != nil {
+		requestChannel <- "Match declined"
 		log.Printf("Failed to send request to client: %v\n", err)
 		return
 	}
@@ -101,10 +91,12 @@ func (ms *MatchmakingServer) requestMatch(username string, req_user_ip string, r
 	buf := make([]byte, 1024)
 	n, err := conn.Read(buf)
 	if err != nil {
+		requestChannel <- "Match declined"
 		log.Printf("Failed to read response from client: %v\n", err)
 		return
 	}
 	response_raw := string(buf[:n])
+	response_raw = strings.TrimSpace(response_raw)
 	if response_raw == string(ACCEPT_REQ) {
 		// Match accepted
 		requestChannel <- string(ACCEPT_REQ)
@@ -161,7 +153,16 @@ func (ms *MatchmakingServer) handleConnection(conn net.Conn) {
 	}
 
 	requestChannel := make(chan string)
-	go ms.requestMatch(username, req_user_ip, requestChannel)
+	// hack for local testing
+	if req_user_ip == "::1" {
+		req_user_ip = "localhost"
+	}
+	connRequest, err2 := net.Dial("tcp", req_user_ip+":3001")
+	if err2 != nil {
+		log.Printf("Failed to connect to client: %v\n", err2)
+		return
+	}
+	go ms.requestMatch(username, connRequest, requestChannel)
 	RequestSent(conn)
 loop:
 	for {
@@ -181,6 +182,7 @@ loop:
 		time.Sleep(50 * time.Millisecond)
 	}
 
+	// Find a server match
 	for {
 		// Keep the connection open
 	}

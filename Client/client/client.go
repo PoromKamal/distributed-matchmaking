@@ -21,6 +21,7 @@ type Client struct {
 	serverRegistryAPI     service.ServerRegistryAPI
 	ServerRegistry        map[string]float32
 	messageRequestChannel chan string
+	ChatRequests          map[string]net.Conn
 }
 
 var lock = &sync.Mutex{}
@@ -84,7 +85,6 @@ func (c *Client) StartMatchmaking(username string, statusChannel chan string) er
 
 // PingServer pings a server and calculates the two-way delay.
 func pingServer(serverIP string) (float32, error) {
-	fmt.Println("Pinging server %s...\n", serverIP)
 	if serverIP == "::1" {
 		serverIP = "localhost"
 	}
@@ -146,6 +146,7 @@ func GetClient() *Client {
 				ServerRegistry:        make(map[string]float32), // Empty for now
 				serverRegistryAPI:     service.NewCentralServerRegistry(url),
 				messageRequestChannel: make(chan string),
+				ChatRequests:          make(map[string]net.Conn),
 			}
 		}
 	}
@@ -179,6 +180,33 @@ func GetInstance() *Client {
 	return clientInstance
 }
 
+func (c *Client) AcceptMessageRequest(username string, statusChannel chan string) {
+	conn, exists := c.ChatRequests[username]
+	if !exists {
+		fmt.Println("FATAL: Could not find user in chat requests")
+		os.Exit(1) // blow up for now, get better error handling later.
+		return
+	}
+
+	// send a ACCEPT_REQ message to Central
+	_, err := conn.Write([]byte(ACCEPT_REQ + "\n"))
+	if err != nil {
+		fmt.Printf("Failed to send ACCEPT_REQ message: %v\n", err)
+		os.Exit(1) // let's just blow up for now
+	}
+	statusChannel <- ACCEPT_REQ
+
+	// Wait for server to send you an chat server to connect to
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		fmt.Printf("Failed to read server: %v\n", err)
+		os.Exit(1) // let's just blow up for now
+	}
+	serverAddress := string(buf[:n])
+	statusChannel <- serverAddress
+}
+
 func handleChatRequest(conn net.Conn) {
 	// Read the username from the connection
 	buf := make([]byte, 1024)
@@ -188,10 +216,7 @@ func handleChatRequest(conn net.Conn) {
 		os.Exit(1) // blow up for now
 	}
 	username := string(buf[:n])
-	clientInstance.messageRequestChannel <- username
-	for {
-		// just loop forever for now
-	}
+	clientInstance.ChatRequests[username] = conn
 	// // send a ACCEPT_REQ message to Central
 	// _, err := conn.Write([]byte(ACCEPT_REQ + "\n"))
 	// if err != nil {
