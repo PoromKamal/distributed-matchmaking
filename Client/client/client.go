@@ -176,6 +176,29 @@ func GetInstance() *Client {
 	return clientInstance
 }
 
+func handleConnection(conn net.Conn){
+
+}
+
+// Listen for message requests on port 3001
+func messageRequestListener(){
+	listener, err := net.Listen("tcp", ":3001")
+	if err != nil {
+		fmt.Println("failed to start message request listener: %w", err)
+		os.Exit(0)
+	}
+	defer listener.Close()
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			// just eat it for now
+			//fmt.Printf("Failed to accept connection: %v\n", err)
+			continue
+		}
+		go handleConnection(conn)
+	}
+}
+
 func (c *Client) Initialize() <-chan error {
 	// Create a channel to communicate the result
 	resultChan := make(chan error)
