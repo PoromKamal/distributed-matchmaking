@@ -34,7 +34,11 @@ var (
 )
 
 func (c *Client) StartMatchmaking(username string, statusChannel chan string) error {
-	conn, err := net.Dial("tcp", "localhost:8081") // Establish a connection to the matchmaking server
+	matchMakingPort := "8081"
+	matchMakingAddress := c.CentralURL[:len(c.CentralURL)-4] + matchMakingPort
+	matchMakingAddress = strings.Replace(matchMakingAddress, "http://", "", 1)
+	fmt.Println("Matchmaking address: ", matchMakingAddress)
+	conn, err := net.Dial("tcp", matchMakingAddress) // Establish a connection to the matchmaking server
 	if err != nil {
 		statusChannel <- SERVER_ERROR
 		return fmt.Errorf("failed to connect to matchmaking server: %w", err)

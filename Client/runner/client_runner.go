@@ -224,8 +224,6 @@ func (cr *clientRunner) startMatchMaking(username string) {
 			return
 		}
 
-		chatRequestAcceptedChannel := make(chan bool)
-		go waitForRequestAccepted(responseChannel, chatRequestAcceptedChannel)
 		// Show loading bar
 		terminated := false
 		dots := []string{".", "..", "...", "....", ".....", "......"}
@@ -266,7 +264,6 @@ func (cr *clientRunner) startMatchMaking(username string) {
 
 		// close all channels
 		close(responseChannel)
-		close(chatRequestAcceptedChannel)
 	}()
 }
 
