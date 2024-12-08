@@ -11,12 +11,14 @@ type Store interface {
 	Read(ip string) (string, error)
 	Delete(ip string) error
 	ReadByUsername(username string) (string, error)
+	UpdateDelayList(username string, delays map[string]float32) error
 }
 
 // InMemoryStore is a thread-safe implementation of the Store interface.
 type InMemoryStore struct {
-	data map[string]string
-	mu   sync.RWMutex
+	data       map[string]string
+	delayLists map[string]map[string]float32 // username --> server --> delay
+	mu         sync.RWMutex
 }
 
 var (
@@ -28,7 +30,8 @@ var (
 func GetInMemoryStore() *InMemoryStore {
 	once.Do(func() {
 		instance = &InMemoryStore{
-			data: make(map[string]string),
+			data:       make(map[string]string),
+			delayLists: make(map[string]map[string]float32),
 		}
 	})
 	return instance
@@ -38,11 +41,6 @@ func GetInMemoryStore() *InMemoryStore {
 func (s *InMemoryStore) Create(ip, username string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if _, exists := s.data[ip]; exists {
-		return fmt.Errorf("IP %s is already registered", ip)
-	}
-
 	s.data[ip] = username
 	return nil
 }
@@ -84,5 +82,12 @@ func (s *InMemoryStore) Delete(ip string) error {
 	}
 
 	delete(s.data, ip)
+	return nil
+}
+
+func (s *InMemoryStore) UpdateDelayList(username string, delays map[string]float32) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.delayLists[username] = delays
 	return nil
 }

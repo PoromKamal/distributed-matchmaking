@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net"
 	"net/http"
@@ -112,8 +113,53 @@ func (c *Client) startPingJob(interval time.Duration) {
 	}()
 }
 
+func (c *Client) reportDelaysToCentral() {
+	// Prepare the request payload
+	payload := map[string]interface{}{
+		"username": c.UserName,
+		"delays":   c.ServerRegistry,
+	}
+
+	// Serialize the payload to JSON
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Error serializing payload: %v", err)
+		return
+	}
+
+	// Send the HTTP POST request to the central server
+	url := c.CentralURL + "/clients/delays"
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		log.Printf("Error creating request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Execute the HTTP request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error sending request to central server: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+}
+
 // updateServerDelays updates the delay values in the ServerRegistry.
 func (c *Client) updateServerDelays() {
+	// Fetch all the servers again
+	servers, err := c.serverRegistryAPI.GetServers()
+	if err != nil {
+		return
+	}
+
+	for _, server := range servers {
+		if _, exists := c.ServerRegistry[server]; !exists {
+			c.ServerRegistry[server] = math.MaxFloat32
+		}
+	}
+
 	for serverIP := range c.ServerRegistry {
 		delay, err := pingServer(serverIP)
 		if err != nil {
@@ -126,7 +172,10 @@ func (c *Client) updateServerDelays() {
 		c.ServerRegistry[serverIP] = delay
 		lock.Unlock()
 
-		fmt.Printf("Updated delay for server %s: %.2f ms\n", serverIP, delay)
+		//fmt.Printf("Updated delay for server %s: %.2f ms\n", serverIP, delay)
+
+		// Putting this inside the loop so we can provide updated ping lists earlier
+		c.reportDelaysToCentral()
 	}
 }
 
@@ -280,7 +329,7 @@ func (c *Client) Initialize() <-chan error {
 			for _, server := range servers {
 				c.ServerRegistry[server] = math.MaxFloat32
 			}
-			c.startPingJob(10 * time.Second)
+			c.startPingJob(3 * time.Second)
 			resultChan <- nil
 		case err := <-errorChan:
 			resultChan <- err

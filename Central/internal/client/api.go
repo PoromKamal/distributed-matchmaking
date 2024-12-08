@@ -24,6 +24,7 @@ func (api *ClientAPI) RegisterRoutes(router *gin.Engine) {
 		group.GET("", api.GetClient)
 		group.GET("/:username", api.GetClientByUsername)
 		group.DELETE("", api.DeleteClient)
+		group.PUT("/delays", api.UpdateDelayList)
 	}
 }
 
@@ -85,4 +86,30 @@ func (api *ClientAPI) DeleteClient(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Client deleted", "ip": clientIP})
+}
+
+func (api *ClientAPI) UpdateDelayList(c *gin.Context) {
+	type UpdateDelayRequest struct {
+		Username string             `json:"username" binding:"required"`
+		Delays   map[string]float32 `json:"delays" binding:"required"`
+	}
+
+	// Parse the JSON payload
+	var req UpdateDelayRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format", "details": err.Error()})
+		return
+	}
+
+	fmt.Println("Recieved ping list: ")
+	fmt.Println(req.Delays)
+	// Call the store method to update the delay list
+	err := api.store.UpdateDelayList(req.Username, req.Delays)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update delay list", "details": err.Error()})
+		return
+	}
+
+	// Respond with success
+	c.JSON(http.StatusOK, gin.H{"message": "Delay list updated successfully"})
 }
