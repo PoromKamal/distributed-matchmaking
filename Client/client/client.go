@@ -60,7 +60,7 @@ func (c *Client) StartChat(messages chan string, serverAddress string, roomId st
 	c.currentChatConn = conn
 
 	// Send the room ID to the server
-	_, err = conn.Write([]byte(roomId + "\n"))
+	_, err = conn.Write([]byte(fmt.Sprintf("%s#%s\n", c.UserName, roomId)))
 	if err != nil {
 		fmt.Printf("Failed to send room ID: %v\n", err)
 		return

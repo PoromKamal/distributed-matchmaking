@@ -1,9 +1,11 @@
 package chat
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"sync"
 )
 
@@ -49,32 +51,31 @@ func (cm *ChatManager) Start() {
 func (cm *ChatManager) handleClient(conn net.Conn) {
 	defer conn.Close()
 
-	// Get the roomId from the client (you can modify this to match the message format)
-	var roomId string
-	fmt.Fscanf(conn, "%s\n", &roomId)
-	log.Printf("Client %s joined room %s\n", conn.RemoteAddr().String(), roomId)
+	clientIp := conn.RemoteAddr().String()
+	reader := bufio.NewReader(conn)
+
+	// Read the initial message (username#roomId)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		log.Printf("Error reading from client %s: %v\n", clientIp, err)
+		return
+	}
+
+	// Trim the newline and parse the username and roomId
+	input = strings.TrimSpace(input)
+	parts := strings.SplitN(input, "#", 2)
+	if len(parts) != 2 {
+		log.Printf("Invalid input format from client %s: %s\n", clientIp, input)
+		return
+	}
+
+	username, roomId := parts[0], parts[1]
+	log.Printf("Client %s (%s) joined room %s\n", username, clientIp, roomId)
 
 	// Add the client to the appropriate room
 	cm.clientMutex.Lock()
 	cm.clients[roomId] = append(cm.clients[roomId], conn)
 	cm.clientMutex.Unlock()
-
-	// Send "pong" to the client every 5 seconds
-	//pongCt := 0
-	// go func() {
-	// 	for {
-	// 		message := fmt.Sprintf("pong%d\n", pongCt)
-	// 		_, err := conn.Write([]byte(message))
-	// 		if err != nil {
-	// 			fmt.Printf("Error writing to client: %v\n", err)
-	// 			return
-	// 		}
-	// 		pongCt += 1
-
-	// 		fmt.Printf("Sent '%s' to client: %s\n", message, conn.RemoteAddr().String())
-	// 		time.Sleep(1 * time.Second)
-	// 	}
-	// }()
 
 	// Listen for messages from the client
 	buffer := make([]byte, 1024) // Buffer for receiving messages
@@ -91,11 +92,11 @@ func (cm *ChatManager) handleClient(conn net.Conn) {
 		}
 
 		// Broadcast the message to all clients in the same roomId
-		cm.broadcastMessage(roomId, message)
+		cm.broadcastMessage(username, roomId, message)
 	}
 }
 
-func (cm *ChatManager) broadcastMessage(roomId, message string) {
+func (cm *ChatManager) broadcastMessage(username, roomId, message string) {
 	cm.clientMutex.Lock()
 	defer cm.clientMutex.Unlock()
 
@@ -106,6 +107,7 @@ func (cm *ChatManager) broadcastMessage(roomId, message string) {
 	}
 
 	for _, client := range clientsInRoom {
+		message := fmt.Sprintf("%s: %s\n", username, message)
 		if _, err := client.Write([]byte(message)); err != nil {
 			fmt.Printf("Error sending message to client: %v\n", err)
 		} else {

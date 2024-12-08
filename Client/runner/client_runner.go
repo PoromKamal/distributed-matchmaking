@@ -284,7 +284,11 @@ func (cr *clientRunner) chatPage(serverAddr string, roomId string) {
 	go func() {
 		text := ""
 		for serverMessage := range messagesChannel {
-			text += "[green]Server > " + serverMessage + "\n"
+			if strings.HasPrefix(serverMessage, cr.client.UserName) {
+				text += "[yellow]" + serverMessage + "[white]\n"
+			} else {
+				text += "[green]" + serverMessage + "[white]\n"
+			}
 			chatView.SetText(text)
 		}
 	}()
