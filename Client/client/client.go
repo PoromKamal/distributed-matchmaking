@@ -23,6 +23,7 @@ type Client struct {
 	ServerRegistry        map[string]float32
 	messageRequestChannel chan string
 	ChatRequests          map[string]net.Conn
+	currentChatConn       net.Conn
 }
 
 var lock = &sync.Mutex{}
@@ -37,20 +38,40 @@ var (
 	ACCEPT_REQ     = "ACCEPT_REQ"
 )
 
+func (c *Client) SendMessage(message string) {
+	if c.currentChatConn == nil {
+		fmt.Println("No chat connection established")
+		return
+	}
+	_, err := c.currentChatConn.Write([]byte(message + "\n"))
+	if err != nil {
+		fmt.Printf("Failed to send message: %v\n", err)
+	}
+}
+
 // StartChat connects to the server and handles sending and receiving messages.
-func (c *Client) StartChat(messages chan string, serverAddress string) {
+func (c *Client) StartChat(messages chan string, serverAddress string, roomId string) {
 	// Connect to the server
 	conn, err := net.Dial("tcp", serverAddress+":3002")
 	if err != nil {
 		fmt.Printf("Failed to connect to server at %s: %v\n", serverAddress, err)
 		return
 	}
+	c.currentChatConn = conn
+
+	// Send the room ID to the server
+	_, err = conn.Write([]byte(roomId + "\n"))
+	if err != nil {
+		fmt.Printf("Failed to send room ID: %v\n", err)
+		return
+	}
+
+	// Wait for the server to acknowledge the connection
 
 	// Listen for messages from the server
 	go func() {
 		buffer := make([]byte, 1024)
 		incomplete := ""
-		defer conn.Close()
 		for {
 			n, err := conn.Read(buffer)
 			if err != nil {
@@ -302,16 +323,29 @@ func (c *Client) AcceptMessageRequest(username string, statusChannel chan string
 		fmt.Printf("Failed to read server: %v\n", err)
 		os.Exit(1) // let's just blow up for now
 	}
-	serverAddress := string(buf[:n])
-	if !strings.HasPrefix(serverAddress, "IP:") {
+	serverResponse := string(buf[:n])
+	if !strings.HasPrefix(serverResponse, "IP:") {
 		statusChannel <- SERVER_ERROR
 		return
 	}
+	// Split on newline
+	responseTokens := strings.Split(serverResponse, "\n")
+	serverAddress := responseTokens[0]
+	roomId := responseTokens[1]
+
 	serverAddress = strings.TrimPrefix(serverAddress, "IP:")
 	serverAddress = strings.TrimSuffix(serverAddress, "\n")
+
+	if !strings.HasPrefix(roomId, "RoomID:") {
+		statusChannel <- SERVER_ERROR
+		return
+	}
+	roomId = strings.TrimPrefix(roomId, "RoomID:")
+	roomId = strings.TrimSuffix(roomId, "\n")
 	// remove new line
 
 	statusChannel <- serverAddress
+	statusChannel <- roomId
 }
 
 func handleChatRequest(conn net.Conn) {

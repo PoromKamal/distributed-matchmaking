@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -168,10 +169,18 @@ func (cr *clientRunner) acceptChatRequest(username string) {
 			cr.pages.SwitchToPage("menu")
 			return
 		}
+		roomId := <-statusChannel
+		if roomId == SERVER_ERROR {
+			textView.SetText("[red]Failed to connect to server! Please try again later.")
+			time.Sleep(1 * time.Second)
+			cr.pages.SwitchToPage("menu")
+			return
+		}
+
 		text += "[green]Connected![white]\n"
 		text += "Joining chat server on " + response
 		textView.SetText(text)
-		go cr.chatPage(response)
+		go cr.chatPage(response, roomId)
 	}()
 }
 
@@ -221,12 +230,12 @@ func (cr *clientRunner) beginChatPage() {
 	cr.pages.AddAndSwitchToPage("beginChat", frame, true)
 }
 
-func (cr *clientRunner) chatPage(serverAddr string) {
+func (cr *clientRunner) chatPage(serverAddr string, roomId string) {
 	// Channel to receive chat messages
 	messagesChannel := make(chan string)
 
 	// Start the chat with the server
-	go cr.client.StartChat(messagesChannel, serverAddr)
+	go cr.client.StartChat(messagesChannel, serverAddr, roomId)
 
 	// Create a text view to display chat messages
 	chatView := tview.NewTextView().
@@ -241,6 +250,15 @@ func (cr *clientRunner) chatPage(serverAddr string) {
 	inputField := tview.NewInputField().
 		SetLabel("Enter a message: ").
 		SetFieldWidth(30)
+
+	inputField.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			// Get user input
+			userMessage := inputField.GetText()
+			cr.client.SendMessage(userMessage)
+			inputField.SetText("")
+		}
+	})
 
 	// inputField.SetDoneFunc(func(key tcell.Key) {
 	// 	if key == tcell.KeyEnter {
@@ -386,9 +404,27 @@ func (cr *clientRunner) startMatchMaking(username string) {
 
 		serverAddress := strings.TrimPrefix(server, "IP:")
 
+		roomId := <-responseChannel
+		if roomId == SERVER_ERROR {
+			textView.SetText("Failed to connect to server! [red]Please try again later[white]")
+			cr.pages.SwitchToPage("menu")
+			// close the channel
+			close(responseChannel)
+			return
+		}
+		if !strings.HasPrefix(roomId, "RoomID:") {
+			textView.SetText("Failed to connect to server! [red]Please try again later[white]")
+			cr.pages.SwitchToPage("menu")
+			// close the channel
+			close(responseChannel)
+			return
+		}
+		roomId = strings.TrimPrefix(roomId, "RoomID:")
+		roomId = strings.TrimSuffix(roomId, "\n")
+
 		text += "Connecting to chat server on " + serverAddress
 		textView.SetText(text)
-		go cr.chatPage(serverAddress)
+		go cr.chatPage(serverAddress, roomId)
 		close(responseChannel)
 	}()
 }

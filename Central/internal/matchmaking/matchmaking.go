@@ -2,6 +2,8 @@ package matchmaking
 
 import (
 	client "central/internal/client"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
@@ -111,6 +113,24 @@ func (ms *MatchmakingServer) requestMatch(username string, conn net.Conn, reques
 	}
 }
 
+func generateRoomId() string {
+	// Format current time without spaces or special characters
+	currentTime := time.Now().Format("20060102150405") // YYYYMMDDHHMMSS
+
+	// Generate a 16-byte cryptographically random string
+	randomBytes := make([]byte, 16)
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		// Handle error (e.g., fall back to another random source or log)
+		panic("Failed to generate cryptographically secure random string")
+	}
+	randomString := hex.EncodeToString(randomBytes) // Convert to hexadecimal string
+
+	// Combine the time and random string
+	roomId := fmt.Sprintf("%s-%s", currentTime, randomString)
+	return roomId
+}
+
 // handleConnection processes an individual client connection
 func (ms *MatchmakingServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
@@ -212,8 +232,11 @@ loop:
 	}
 	// Send the server IP to both clients
 	serverIP := common[0]
-	conn.Write([]byte("IP:" + serverIP + "\n"))
-	connRequest.Write([]byte("IP:" + serverIP + "\n"))
+	roomId := generateRoomId()
+
+	response := fmt.Sprintf("IP:%s\nRoomID:%s\n", serverIP, roomId)
+	conn.Write([]byte(response))
+	connRequest.Write([]byte(response))
 	// Close both connections after sending the IP
 	conn.Close()
 	connRequest.Close()
