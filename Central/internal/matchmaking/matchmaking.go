@@ -20,6 +20,7 @@ var (
 	USER_NOT_FOUND = []byte("USER_NOT_FOUND\n")
 	REQ_ACCEPTED   = []byte("REQ_ACCEPTED\n")
 	ACCEPT_REQ     = []byte("ACCEPT_REQ")
+	SERVER_ERROR   = []byte("SERVER_ERROR\n")
 )
 
 // NewMatchmakingServer initializes a new matchmaking server
@@ -66,6 +67,10 @@ func UserNotFound(conn net.Conn) {
 
 func RequestAccepted(conn net.Conn) {
 	conn.Write(REQ_ACCEPTED)
+}
+
+func ServerError(conn net.Conn) {
+	conn.Write(SERVER_ERROR)
 }
 
 func GetRequestedUsername(conn net.Conn) string {
@@ -183,7 +188,33 @@ loop:
 	}
 
 	// Find a server match
-	for {
-		// Keep the connection open
+	// For now, just send them the first in common server
+	servers1, err1 := ms.clientStore.GetDelayList(username)
+	servers2, err2 := ms.clientStore.GetDelayList(req_user)
+	if err1 != nil || err2 != nil {
+		log.Printf("Failed to get delay list: %v\n", err1)
+		ServerError(conn)
+		ServerError(connRequest)
+		return
 	}
+	common := []string{}
+	// O(n^2) ?????? OMGG HOW CAN I EVER GO OUT IN PUBLIC
+	for server1 := range servers1 {
+		for server2 := range servers2 {
+			if server1 == server2 {
+				common = append(common, server1)
+			}
+		}
+	}
+	if len(common) == 0 {
+		ServerError(conn)
+		return
+	}
+	// Send the server IP to both clients
+	serverIP := common[0]
+	conn.Write([]byte("IP:" + serverIP + "\n"))
+	connRequest.Write([]byte("IP:" + serverIP + "\n"))
+	// Close both connections after sending the IP
+	conn.Close()
+	connRequest.Close()
 }

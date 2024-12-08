@@ -1,6 +1,7 @@
 package main
 
 import (
+	"chatserver/internal/chat"
 	"chatserver/jobs"
 	"log"
 	"time"
@@ -14,9 +15,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error initializing Heartbeat job: %v", err)
 	}
+	chatManager := chat.NewChatManager(":3002")
 
 	// Start the Heartbeat job
 	heartbeat.Start()
+	go chatManager.Start()
 	// Initialize Gin router
 	r := gin.Default()
 

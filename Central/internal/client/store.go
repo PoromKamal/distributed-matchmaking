@@ -12,6 +12,7 @@ type Store interface {
 	Delete(ip string) error
 	ReadByUsername(username string) (string, error)
 	UpdateDelayList(username string, delays map[string]float32) error
+	GetDelayList(username string) (map[string]float32, error)
 }
 
 // InMemoryStore is a thread-safe implementation of the Store interface.
@@ -90,4 +91,14 @@ func (s *InMemoryStore) UpdateDelayList(username string, delays map[string]float
 	defer s.mu.Unlock()
 	s.delayLists[username] = delays
 	return nil
+}
+
+func (s *InMemoryStore) GetDelayList(username string) (map[string]float32, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	delays, exists := s.delayLists[username]
+	if !exists {
+		return nil, fmt.Errorf("delays for username %s not found", username)
+	}
+	return delays, nil
 }

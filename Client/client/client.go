@@ -253,6 +253,11 @@ func (c *Client) AcceptMessageRequest(username string, statusChannel chan string
 		os.Exit(1) // let's just blow up for now
 	}
 	serverAddress := string(buf[:n])
+	if !strings.HasPrefix(serverAddress, "IP:") {
+		statusChannel <- SERVER_ERROR
+		return
+	}
+	serverAddress = strings.TrimPrefix(serverAddress, "IP:")
 	statusChannel <- serverAddress
 }
 
@@ -266,22 +271,6 @@ func handleChatRequest(conn net.Conn) {
 	}
 	username := string(buf[:n])
 	clientInstance.ChatRequests[username] = conn
-	// // send a ACCEPT_REQ message to Central
-	// _, err := conn.Write([]byte(ACCEPT_REQ + "\n"))
-	// if err != nil {
-	// 	fmt.Printf("Failed to send ACCEPT_REQ message: %v\n", err)
-	// 	os.Exit(1) // let's just blow up for now
-	// }
-
-	// // Wait for server to send you an chat server to connect to
-	// buf := make([]byte, 1024)
-	// n, err := conn.Read(buf)
-	// if err != nil {
-	// 	fmt.Printf("Failed to read server: %v\n", err)
-	// 	os.Exit(1) // let's just blow up for now
-	// }
-	// serverAddress := string(buf[:n])
-	// return serverAddress // return for now
 }
 
 // Listen for message requests on port 3001

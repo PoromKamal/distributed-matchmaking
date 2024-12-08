@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/rivo/tview"
@@ -168,6 +169,7 @@ func (cr *clientRunner) acceptChatRequest(username string) {
 			return
 		}
 		text += "[green]Connected![white]\n"
+		text += "Joining chat server on " + response
 		textView.SetText(text)
 	}()
 }
@@ -267,11 +269,11 @@ func (cr *clientRunner) startMatchMaking(username string) {
 			case chatAccepted := <-responseChannel:
 				// Channel value read, exit the loop
 				if chatAccepted == REQ_ACCEPTED {
-					text += "Awaiting response... [green]Chat request accepted!"
+					text += "Awaiting response... [green]Chat request accepted![white]\n"
 					textView.SetText(text)
 					terminated = true
 				} else if chatAccepted == SERVER_ERROR {
-					text += "Awaiting response... [red]Chat request declined!"
+					text += "Awaiting response... [red]Chat request declined![white]\n"
 					textView.SetText(text)
 					terminated = true
 					break
@@ -297,6 +299,27 @@ func (cr *clientRunner) startMatchMaking(username string) {
 			//time.Sleep(20 * time.Millisecond)
 		}
 
+		server := <-responseChannel
+		if server == SERVER_ERROR {
+			textView.SetText("Failed to connect to server! [red]Please try again later[white]")
+			cr.pages.SwitchToPage("menu")
+			// close the channel
+			close(responseChannel)
+			return
+		}
+
+		if !strings.HasPrefix(server, "IP:") {
+			textView.SetText("Failed to connect to server! [red]Please try again later[white]")
+			cr.pages.SwitchToPage("menu")
+			// close the channel
+			close(responseChannel)
+			return
+		}
+
+		serverAddress := strings.TrimPrefix(server, "IP:")
+
+		text += "Connecting to chat server on " + serverAddress
+		textView.SetText(text)
 		// close all channels
 		close(responseChannel)
 	}()
