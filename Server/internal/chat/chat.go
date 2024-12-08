@@ -46,14 +46,17 @@ func (cm *ChatManager) handleClient(conn net.Conn) {
 	defer conn.Close()
 
 	// Send "pong" to the client every 5 seconds
+	pongCt := 0
 	for {
-		_, err := conn.Write([]byte("pong\n"))
+		message := fmt.Sprintf("pong%d\n", pongCt)
+		_, err := conn.Write([]byte(message))
 		if err != nil {
 			fmt.Printf("Error writing to client: %v\n", err)
 			return
 		}
+		pongCt += 1
 
-		fmt.Printf("Sent 'pong' to client: %s\n", conn.RemoteAddr().String())
+		fmt.Printf("Sent '%s' to client: %s\n", message, conn.RemoteAddr().String())
 		time.Sleep(1 * time.Second)
 	}
 }

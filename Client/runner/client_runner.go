@@ -222,23 +222,70 @@ func (cr *clientRunner) beginChatPage() {
 }
 
 func (cr *clientRunner) chatPage(serverAddr string) {
+	// Channel to receive chat messages
 	messagesChannel := make(chan string)
+
+	// Start the chat with the server
 	go cr.client.StartChat(messagesChannel, serverAddr)
-	textView := tview.NewTextView().SetChangedFunc(func() { cr.app.Draw() })
-	frame := tview.NewFrame(textView)
-	frame.SetTitle("Chat").SetTitleAlign(tview.AlignCenter)
-	frame.SetBorder(true)
-	cr.pages.AddAndSwitchToPage("chat", frame, true)
+
+	// Create a text view to display chat messages
+	chatView := tview.NewTextView().
+		SetDynamicColors(true).
+		SetScrollable(false).
+		SetWrap(true).
+		SetChangedFunc(func() {
+			cr.app.Draw()
+		})
+
+	//Create an input field for user input
+	inputField := tview.NewInputField().
+		SetLabel("Enter a message: ").
+		SetFieldWidth(30)
+
+	// inputField.SetDoneFunc(func(key tcell.Key) {
+	// 	if key == tcell.KeyEnter {
+	// 		// Get user input
+	// 		userMessage := inputField.GetText()
+
+	// 		// Display user's message
+	// 		//chatView.Write([]byte("[yellow]You > " + userMessage + "\n"))
+	// 		chatView.SetText("[yellow]You > " + userMessage + "\n")
+
+	// 		// // Send user's message to the server
+	// 		// _, err := fmt.Fprintln(cr.client.conn, userMessage)
+	// 		// if err != nil {
+	// 		// 	chatView.Write([]byte("[red]Error sending message to server.\n"))
+	// 		// }
+
+	// 		// Clear input field
+	// 		inputField.SetText("")
+	// 	}
+	// })
+
+	// Goroutine to listen to messages from the server
 	go func() {
 		text := ""
-		for {
-			select {
-			case message := <-messagesChannel:
-				text += "from server: " + message + "\n"
-				textView.SetText(text)
-			}
+		for serverMessage := range messagesChannel {
+			text += "[green]Server > " + serverMessage + "\n"
+			chatView.SetText(text)
 		}
 	}()
+
+	// Create a grid layout
+	grid := tview.NewGrid().
+		SetRows(0, 3).                              // Chat area (expandable) and input area (fixed height)
+		SetColumns(0).                              // Full width
+		AddItem(chatView, 0, 0, 1, 1, 0, 0, false). // Chat messages take the first row
+		AddItem(inputField, 1, 0, 1, 1, 0, 0, true) // Input field takes the second row
+
+	// // Wrap the grid in a frame with a title
+	// frame := tview.NewFrame(grid).
+	// 	SetTitle("Chat").
+	// 	SetTitleAlign(tview.AlignCenter).
+	// 	SetBorder(true)
+
+	// Add the frame to pages and switch to it
+	cr.pages.AddAndSwitchToPage("chat", grid, true)
 }
 
 func (cr *clientRunner) startMatchMaking(username string) {
