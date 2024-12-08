@@ -40,7 +40,7 @@ func (s *InMemoryStore) Create(ip string) error {
 	defer s.mu.Unlock()
 
 	if _, exists := s.data[ip]; exists {
-		return fmt.Errorf("IP %s is already registered", ip)
+		return nil
 	}
 
 	s.data[ip] = true
