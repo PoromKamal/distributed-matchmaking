@@ -54,6 +54,6 @@ func (cm *ChatManager) handleClient(conn net.Conn) {
 		}
 
 		fmt.Printf("Sent 'pong' to client: %s\n", conn.RemoteAddr().String())
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 }

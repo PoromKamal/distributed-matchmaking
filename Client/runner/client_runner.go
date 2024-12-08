@@ -171,6 +171,7 @@ func (cr *clientRunner) acceptChatRequest(username string) {
 		text += "[green]Connected![white]\n"
 		text += "Joining chat server on " + response
 		textView.SetText(text)
+		go cr.chatPage(response)
 	}()
 }
 
@@ -218,6 +219,26 @@ func (cr *clientRunner) beginChatPage() {
 	frame.SetTitle("Begin Chat").SetTitleAlign(tview.AlignCenter)
 	frame.SetBorder(true)
 	cr.pages.AddAndSwitchToPage("beginChat", frame, true)
+}
+
+func (cr *clientRunner) chatPage(serverAddr string) {
+	messagesChannel := make(chan string)
+	go cr.client.StartChat(messagesChannel, serverAddr)
+	textView := tview.NewTextView().SetChangedFunc(func() { cr.app.Draw() })
+	frame := tview.NewFrame(textView)
+	frame.SetTitle("Chat").SetTitleAlign(tview.AlignCenter)
+	frame.SetBorder(true)
+	cr.pages.AddAndSwitchToPage("chat", frame, true)
+	go func() {
+		text := ""
+		for {
+			select {
+			case message := <-messagesChannel:
+				text += "from server: " + message + "\n"
+				textView.SetText(text)
+			}
+		}
+	}()
 }
 
 func (cr *clientRunner) startMatchMaking(username string) {
@@ -320,7 +341,7 @@ func (cr *clientRunner) startMatchMaking(username string) {
 
 		text += "Connecting to chat server on " + serverAddress
 		textView.SetText(text)
-		// close all channels
+		go cr.chatPage(serverAddress)
 		close(responseChannel)
 	}()
 }

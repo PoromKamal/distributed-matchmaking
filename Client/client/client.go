@@ -37,6 +37,56 @@ var (
 	ACCEPT_REQ     = "ACCEPT_REQ"
 )
 
+// StartChat connects to the server and handles sending and receiving messages.
+func (c *Client) StartChat(messages chan string, serverAddress string) {
+	// Connect to the server
+	conn, err := net.Dial("tcp", serverAddress+":3002")
+	if err != nil {
+		fmt.Printf("Failed to connect to server at %s: %v\n", serverAddress, err)
+		return
+	}
+
+	// Listen for messages from the server
+	go func() {
+		buffer := make([]byte, 1024)
+		incomplete := ""
+		defer conn.Close()
+		for {
+			n, err := conn.Read(buffer)
+			if err != nil {
+				fmt.Printf("Error reading from server: %v\n", err)
+				return
+			}
+
+			// Append to incomplete data
+			incomplete += string(buffer[:n])
+
+			// Split messages based on newline
+			messagesArr := splitMessages(&incomplete, '\n')
+			for _, msg := range messagesArr {
+				messages <- msg
+			}
+		}
+	}()
+}
+
+// Utility to split messages based on a delimiter and handle leftover data
+func splitMessages(data *string, delimiter rune) []string {
+	parts := []string{}
+	lastIndex := 0
+
+	for i, char := range *data {
+		if char == delimiter {
+			parts = append(parts, (*data)[lastIndex:i])
+			lastIndex = i + 1
+		}
+	}
+
+	// Keep any incomplete message
+	*data = (*data)[lastIndex:]
+	return parts
+}
+
 func (c *Client) StartMatchmaking(username string, statusChannel chan string) error {
 	matchMakingPort := "8081"
 	matchMakingAddress := c.CentralURL[:len(c.CentralURL)-4] + matchMakingPort
@@ -258,6 +308,9 @@ func (c *Client) AcceptMessageRequest(username string, statusChannel chan string
 		return
 	}
 	serverAddress = strings.TrimPrefix(serverAddress, "IP:")
+	serverAddress = strings.TrimSuffix(serverAddress, "\n")
+	// remove new line
+
 	statusChannel <- serverAddress
 }
 
