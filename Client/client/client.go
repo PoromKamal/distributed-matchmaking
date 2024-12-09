@@ -41,53 +41,6 @@ var (
 	ACCEPT_REQ     = "ACCEPT_REQ"
 )
 
-// This listener will wait for a message from the server which will
-// relocate the chat connection to a new server.
-func StartChatSwitchListener() {
-	conn, err := net.Listen("tcp", ":3003")
-	if err != nil {
-		fmt.Println("Failed to start chat switch listener")
-		return
-	}
-	defer conn.Close()
-	for {
-		serverConn, err := conn.Accept()
-		if err != nil {
-			fmt.Println("Failed to accept connection")
-			continue
-		}
-
-		// Read the new server address
-		buf := make([]byte, 1024)
-		n, err := serverConn.Read(buf)
-		if err != nil {
-			fmt.Printf("Failed to read from server: %v\n", err)
-			continue
-		}
-		newServerAddress := string(buf[:n])
-		newServerAddress = strings.TrimSuffix(newServerAddress, "\n")
-		newConn, err := net.Dial("tcp", newServerAddress+":3002")
-		if err != nil {
-			fmt.Printf("Failed to connect to new server: %v\n", err)
-			continue
-		}
-
-		//chatLock.Lock()
-		clientInstance.CurrentChatServer = newServerAddress
-		clientInstance.currentChatConn = newConn
-
-		// Register the client and send roomId to the new server
-		// Send the room ID to the server
-		_, err = clientInstance.currentChatConn.Write([]byte(fmt.Sprintf("%s#%s\n",
-			clientInstance.UserName,
-			clientInstance.currentRoomId)))
-		if err != nil {
-			fmt.Printf("Failed to send room ID: %v\n", err)
-			continue
-		}
-	}
-}
-
 func (c *Client) SendMessage(message string) {
 	if c.currentChatConn == nil {
 		fmt.Println("No chat connection established")

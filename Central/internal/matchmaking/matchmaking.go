@@ -2,6 +2,7 @@ package matchmaking
 
 import (
 	client "central/internal/client"
+	service "central/internal/service"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -14,7 +15,8 @@ import (
 )
 
 type MatchmakingServer struct {
-	clientStore client.Store
+	clientStore  client.Store
+	serviceStore service.Store
 }
 
 var (
@@ -28,8 +30,8 @@ var (
 )
 
 // NewMatchmakingServer initializes a new matchmaking server
-func NewMatchmakingServer(store client.Store) *MatchmakingServer {
-	return &MatchmakingServer{clientStore: store}
+func NewMatchmakingServer(store client.Store, serviceStore service.Store) *MatchmakingServer {
+	return &MatchmakingServer{clientStore: store, serviceStore: serviceStore}
 }
 
 // Start starts the TCP matchmaking server
@@ -38,6 +40,7 @@ func (ms *MatchmakingServer) Start(address string) error {
 	if err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
+	go ms.backgroundAnalysis()
 	defer listener.Close()
 
 	fmt.Printf("Matchmaking server listening on %s...\n", address)
@@ -291,21 +294,70 @@ loop:
 	conn.Write([]byte(response))
 	connRequest.Write([]byte(response))
 	// Close both connections after sending the IP
+	ms.clientStore.InsertChatInstance(roomId, serverIP, []string{username, req_user})
 	conn.Close()
 	connRequest.Close()
+}
 
-	time.Sleep(7 * time.Second)
-	// Redirect them to server 2
-	connRedirect1, err2 := net.Dial("tcp", clientIP+":3003")
-	connRedirect2, err3 := net.Dial("tcp", req_user_ip+":3003")
-	if err2 != nil || err3 != nil {
-		ServerError(conn)
-		ServerError(connRequest)
-		return
+// runs every 10 seconds
+// Reroutes clients to the best server
+func (ms *MatchmakingServer) backgroundAnalysis() {
+	ticker := time.NewTicker(4 * time.Second)
+	defer ticker.Stop() // Ensure ticker is stopped when function exits
+
+	for {
+		select {
+		case <-ticker.C:
+			// Iterate over each server, and get the chat instances, if the server
+			// hasn't sent a heartbeat in the last 10 seconds, reroute the clients
+			// to the best server
+			allChatInstances, err := ms.clientStore.GetAllChatInstances()
+			if err != nil {
+				log.Printf("Error getting chat instances: %v\n", err)
+				continue
+			}
+
+			for _, instance := range allChatInstances {
+				client1 := instance.Users[0]
+				client2 := instance.Users[1]
+				client1Delay, err := ms.clientStore.GetDelayList(client1)
+				client2Delay, err2 := ms.clientStore.GetDelayList(client2)
+				if err != nil || err2 != nil {
+					log.Printf("Error getting delay list for clients: %v\n", err)
+					continue
+				}
+				serverIP, err := compute_optimal_server(client1Delay, client2Delay)
+				if err != nil {
+					log.Printf("Error computing optimal server: %v\n", err)
+					continue
+				}
+				if serverIP != instance.ChatServer {
+					// Reroute the clients
+					ms.clientStore.RemoveChatInstancesForUser(client1)
+					ms.clientStore.RemoveChatInstancesForUser(client2)
+					ms.clientStore.InsertChatInstance(instance.RoomId, serverIP, []string{client1, client2})
+					fmt.Printf("Rerouting clients %s and %s to server %s\n", client1, client2, serverIP)
+
+					client1IP, err := ms.clientStore.ReadByUsername(client1)
+					client2IP, err2 := ms.clientStore.ReadByUsername(client2)
+					if err != nil || err2 != nil {
+						log.Printf("Error getting client IPs: %v\n", err)
+						continue
+					}
+
+					// Redirect them to server 2
+					connRedirect1, err2 := net.Dial("tcp", client1IP+":3003")
+					connRedirect2, err3 := net.Dial("tcp", client2IP+":3003")
+					if err2 != nil || err3 != nil {
+						continue
+					}
+					connRedirect1.Write([]byte(serverIP))
+					connRedirect2.Write([]byte(serverIP))
+
+					connRedirect1.Close()
+					connRedirect2.Close()
+				}
+			}
+		}
 	}
-	connRedirect1.Write([]byte("10.0.0.3"))
-	connRedirect2.Write([]byte("10.0.0.3"))
-
-	connRedirect1.Close()
-	connRedirect2.Close()
 }

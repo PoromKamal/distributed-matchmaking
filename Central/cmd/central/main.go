@@ -14,7 +14,7 @@ func main() {
 	clientAPI := ClientAPI.NewClientAPI(clientStore)
 	serviceStore := ServiceAPI.GetInMemoryStore()
 	serviceAPI := ServiceAPI.NewServiceAPI(serviceStore)
-	matchmakingService := matchmaking.NewMatchmakingServer(clientStore)
+	matchmakingService := matchmaking.NewMatchmakingServer(clientStore, serviceStore)
 
 	// Create Gin router
 	router := gin.Default()

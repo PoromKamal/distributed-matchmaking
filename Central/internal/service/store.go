@@ -3,6 +3,7 @@ package serviceapi
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
 // Store is an interface to define generic storage behavior.
@@ -13,9 +14,13 @@ type Store interface {
 	Patch(ip string) (string, error)
 }
 
+type ServiceHeartbeat struct {
+	lastHeartbeat time.Time
+}
+
 // InMemoryStore is a thread-safe implementation of the Store interface.
 type InMemoryStore struct {
-	data map[string]bool
+	data map[string]ServiceHeartbeat
 	mu   sync.RWMutex
 }
 
@@ -28,7 +33,7 @@ var (
 func GetInMemoryStore() *InMemoryStore {
 	once.Do(func() {
 		instance = &InMemoryStore{
-			data: make(map[string]bool),
+			data: make(map[string]ServiceHeartbeat),
 		}
 	})
 	return instance
@@ -39,11 +44,11 @@ func (s *InMemoryStore) Create(ip string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, exists := s.data[ip]; exists {
-		return nil
-	}
+	// if _, exists := s.data[ip]; exists {
+	// 	return nil
+	// }
 
-	s.data[ip] = true
+	s.data[ip] = ServiceHeartbeat{lastHeartbeat: time.Now()}
 	return nil
 }
 
@@ -52,14 +57,12 @@ func (s *InMemoryStore) Read() ([]string, error) {
 	s.mu.RLock() // Lock for read-only access
 	defer s.mu.RUnlock()
 
-	var activeIPs []string
-	for ip, isActive := range s.data {
-		if isActive {
-			activeIPs = append(activeIPs, ip)
-		}
+	var ips []string
+	for ip, _ := range s.data {
+		ips = append(ips, ip)
 	}
 
-	return activeIPs, nil
+	return ips, nil
 }
 
 // Soft delete, just set the up status to false
@@ -68,7 +71,7 @@ func (s *InMemoryStore) Delete(ip string) error {
 	defer s.mu.Unlock()
 	for k := range s.data {
 		if k == ip {
-			s.data[k] = false
+			s.data[k] = ServiceHeartbeat{lastHeartbeat: time.Now()}
 			return nil
 		}
 	}
@@ -82,7 +85,7 @@ func (s *InMemoryStore) Patch(ip string) (string, error) {
 
 	for k := range s.data {
 		if k == ip {
-			s.data[k] = true
+			s.data[k] = ServiceHeartbeat{lastHeartbeat: time.Now()}
 			return ip, nil
 		}
 	}

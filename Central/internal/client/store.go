@@ -17,13 +17,14 @@ type Store interface {
 	RemoveChatInstance(roomId string) (string, error)
 	RemoveChatInstancesForServer(server string) ([]string, error)
 	RemoveChatInstancesForUser(user string) (string, error)
+	GetAllChatInstances() ([]ChatInstance, error)
 }
 
 type ChatInstance struct {
-	chatServer string
-	users      []string
-	roomId     string
-	active     bool
+	ChatServer string
+	Users      []string
+	RoomId     string
+	Active     bool
 }
 
 // InMemoryStore is a thread-safe implementation of the Store interface.
@@ -119,7 +120,7 @@ func (s *InMemoryStore) GetDelayList(username string) (map[string]float32, error
 func (s *InMemoryStore) InsertChatInstance(roomId string, chatServer string, users []string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	newInstance := ChatInstance{roomId: roomId, chatServer: chatServer, users: users, active: true}
+	newInstance := ChatInstance{RoomId: roomId, ChatServer: chatServer, Users: users, Active: true}
 	s.chatInstances = append(s.chatInstances, newInstance)
 	return roomId, nil
 }
@@ -127,7 +128,7 @@ func (s *InMemoryStore) RemoveChatInstance(roomId string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for i, instance := range s.chatInstances {
-		if instance.roomId == roomId {
+		if instance.RoomId == roomId {
 			s.chatInstances = append(s.chatInstances[:i], s.chatInstances[i+1:]...)
 			return roomId, nil
 		}
@@ -140,8 +141,8 @@ func (s *InMemoryStore) RemoveChatInstancesForServer(server string) ([]string, e
 	defer s.mu.RUnlock()
 	var removedInstances []string
 	for i, instance := range s.chatInstances {
-		if instance.chatServer == server {
-			removedInstances = append(removedInstances, instance.roomId)
+		if instance.ChatServer == server {
+			removedInstances = append(removedInstances, instance.RoomId)
 			s.chatInstances = append(s.chatInstances[:i], s.chatInstances[i+1:]...)
 		}
 	}
@@ -152,15 +153,29 @@ func (s *InMemoryStore) RemoveChatInstancesForUser(user string) (string, error) 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for i, instance := range s.chatInstances {
-		for j, u := range instance.users {
+		// if chat instance has user, remove it
+		hasUser := false
+		for _, u := range instance.Users {
 			if u == user {
-				instance.users = append(instance.users[:j], instance.users[j+1:]...)
-				if len(instance.users) == 0 {
-					s.chatInstances = append(s.chatInstances[:i], s.chatInstances[i+1:]...)
-					return instance.roomId, nil
-				}
+				hasUser = true
+				break
 			}
+		}
+		if hasUser {
+			if i == len(s.chatInstances)-1 {
+				s.chatInstances = s.chatInstances[:i]
+				return instance.RoomId, nil
+			}
+
+			s.chatInstances = append(s.chatInstances[:i], s.chatInstances[i+1:]...)
+			return instance.RoomId, nil
 		}
 	}
 	return "", fmt.Errorf("chat instance with user %s not found", user)
+}
+
+func (s *InMemoryStore) GetAllChatInstances() ([]ChatInstance, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.chatInstances, nil
 }
