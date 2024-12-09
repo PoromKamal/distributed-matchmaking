@@ -25,6 +25,7 @@ type Client struct {
 	ChatRequests          map[string]net.Conn
 	currentChatConn       net.Conn
 	CurrentChatServer     string
+	currentRoomId         string
 }
 
 var lock = &sync.Mutex{}
@@ -42,7 +43,7 @@ var (
 
 // This listener will wait for a message from the server which will
 // relocate the chat connection to a new server.
-func (c *Client) StartChatSwitchListener() {
+func StartChatSwitchListener() {
 	conn, err := net.Listen("tcp", ":3003")
 	if err != nil {
 		fmt.Println("Failed to start chat switch listener")
@@ -65,16 +66,25 @@ func (c *Client) StartChatSwitchListener() {
 		}
 		newServerAddress := string(buf[:n])
 		newServerAddress = strings.TrimSuffix(newServerAddress, "\n")
-		newConn, err := net.Dial("tcp", newServerAddress)
+		newConn, err := net.Dial("tcp", newServerAddress+":3002")
 		if err != nil {
 			fmt.Printf("Failed to connect to new server: %v\n", err)
 			continue
 		}
 
-		chatLock.Lock()
-		c.CurrentChatServer = newServerAddress
-		c.currentChatConn = newConn
-		chatLock.Unlock()
+		//chatLock.Lock()
+		clientInstance.CurrentChatServer = newServerAddress
+		clientInstance.currentChatConn = newConn
+
+		// Register the client and send roomId to the new server
+		// Send the room ID to the server
+		_, err = clientInstance.currentChatConn.Write([]byte(fmt.Sprintf("%s#%s\n",
+			clientInstance.UserName,
+			clientInstance.currentRoomId)))
+		if err != nil {
+			fmt.Printf("Failed to send room ID: %v\n", err)
+			continue
+		}
 	}
 }
 
@@ -103,6 +113,7 @@ func (c *Client) StartChat(messages chan string, serverAddress string, roomId st
 	chatLock.Lock()
 	c.currentChatConn = conn
 	c.CurrentChatServer = serverAddress
+	c.currentRoomId = roomId
 	chatLock.Unlock()
 	// Send the room ID to the server
 	_, err = conn.Write([]byte(fmt.Sprintf("%s#%s\n", c.UserName, roomId)))
@@ -111,18 +122,19 @@ func (c *Client) StartChat(messages chan string, serverAddress string, roomId st
 		return
 	}
 	messages <- "START_CHAT"
-
 	// Listen for messages from the server
 	go func() {
 		buffer := make([]byte, 1024)
 		incomplete := ""
 		for {
 			n, err := c.currentChatConn.Read(buffer)
+			//c.currentChatConn.Write([]byte("ACK\n"))
 			if err != nil {
 				// Just eat the error
 				continue
 			}
-
+			//fmt.Printf("Got message: %s\n", string(buffer[:n]))
+			//time.Sleep(1 * time.Second)
 			// Append to incomplete data
 			incomplete += string(buffer[:n])
 
@@ -130,6 +142,52 @@ func (c *Client) StartChat(messages chan string, serverAddress string, roomId st
 			messagesArr := splitMessages(&incomplete, '\n')
 			for _, msg := range messagesArr {
 				messages <- msg
+			}
+		}
+	}()
+
+	go func() {
+		// listen for server relocations
+		conn, err := net.Listen("tcp", ":3003")
+		if err != nil {
+			fmt.Println("Failed to start chat switch listener")
+			return
+		}
+		defer conn.Close()
+		for {
+			serverConn, err := conn.Accept()
+			if err != nil {
+				fmt.Println("Failed to accept connection")
+				continue
+			}
+
+			// Read the new server address
+			buf := make([]byte, 1024)
+			n, err := serverConn.Read(buf)
+			if err != nil {
+				fmt.Printf("Failed to read from server: %v\n", err)
+				continue
+			}
+			newServerAddress := string(buf[:n])
+			newServerAddress = strings.TrimSuffix(newServerAddress, "\n")
+			newConn, err := net.Dial("tcp", newServerAddress+":3002")
+			if err != nil {
+				fmt.Printf("Failed to connect to new server: %v\n", err)
+				continue
+			}
+
+			//chatLock.Lock()
+			c.CurrentChatServer = newServerAddress
+			c.currentChatConn = newConn
+
+			// Register the client and send roomId to the new server
+			// Send the room ID to the server
+			_, err = clientInstance.currentChatConn.Write([]byte(fmt.Sprintf("%s#%s\n",
+				clientInstance.UserName,
+				clientInstance.currentRoomId)))
+			if err != nil {
+				fmt.Printf("Failed to send room ID: %v\n", err)
+				continue
 			}
 		}
 	}()
@@ -427,6 +485,7 @@ func (c *Client) Initialize() <-chan error {
 	// Create a channel to communicate the result
 	resultChan := make(chan error)
 	go messageRequestListener()
+	//go StartChatSwitchListener()
 	// Start the initialization in a goroutine
 	go func() {
 		// Create channels for server fetching

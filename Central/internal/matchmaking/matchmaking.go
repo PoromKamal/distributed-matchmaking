@@ -293,4 +293,19 @@ loop:
 	// Close both connections after sending the IP
 	conn.Close()
 	connRequest.Close()
+
+	time.Sleep(7 * time.Second)
+	// Redirect them to server 2
+	connRedirect1, err2 := net.Dial("tcp", clientIP+":3003")
+	connRedirect2, err3 := net.Dial("tcp", req_user_ip+":3003")
+	if err2 != nil || err3 != nil {
+		ServerError(conn)
+		ServerError(connRequest)
+		return
+	}
+	connRedirect1.Write([]byte("10.0.0.3"))
+	connRedirect2.Write([]byte("10.0.0.3"))
+
+	connRedirect1.Close()
+	connRedirect2.Close()
 }

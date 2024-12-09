@@ -281,20 +281,18 @@ func (cr *clientRunner) chatPage(serverAddr string, roomId string) {
 
 	//Wait for the chat to start
 	start := <-messagesChannel
-	fmt.Println("Chat started with: ", start)
 	if start != "START_CHAT" {
 		cr.pages.SwitchToPage("menu")
 		close(messagesChannel)
 		return
 	}
 
-	// We know that cr.client.CurrentChatServer is hydrated for sure, so now we set it again
-	headerView.SetText("[cyan]Chatting on server: [white]" + cr.client.CurrentChatServer)
-
 	// Goroutine to listen to messages from the server
 	go func() {
 		text := ""
 		for serverMessage := range messagesChannel {
+			// We know that cr.client.CurrentChatServer is hydrated for sure, so now we set it again
+			headerView.SetText("[cyan]Chatting on server: [white]" + cr.client.CurrentChatServer)
 			if strings.HasPrefix(serverMessage, cr.client.UserName) {
 				text += "[yellow]" + serverMessage + "[white]\n"
 			} else {

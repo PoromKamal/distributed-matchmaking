@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 )
 
 type ChatManager struct {
@@ -91,6 +92,13 @@ func (cm *ChatManager) handleClient(conn net.Conn) {
 			continue
 		}
 
+		timer := time.NewTimer(2 * time.Second)
+		serverIp := conn.LocalAddr().String()
+		go func() {
+			<-timer.C
+			cm.broadcastMessage("server", roomId, "Pong from server "+serverIp+"\n")
+		}()
+
 		// Broadcast the message to all clients in the same roomId
 		cm.broadcastMessage(username, roomId, message)
 	}
@@ -108,10 +116,11 @@ func (cm *ChatManager) broadcastMessage(username, roomId, message string) {
 
 	for _, client := range clientsInRoom {
 		message := fmt.Sprintf("%s: %s\n", username, message)
+		clientIp := client.RemoteAddr().String()
 		if _, err := client.Write([]byte(message)); err != nil {
-			fmt.Printf("Error sending message to client: %v\n", err)
+			fmt.Printf("Error sending message to client %s: %v\n", clientIp, err)
 		} else {
-			fmt.Printf("Broadcasted '%s' to room '%s'\n", message, roomId)
+			fmt.Printf("Broadcasted '%s' to room %s '%s'\n", clientIp, message, roomId)
 		}
 	}
 }
