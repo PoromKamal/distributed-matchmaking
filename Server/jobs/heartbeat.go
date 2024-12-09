@@ -33,7 +33,7 @@ func readConfig(configFile string) (string, error) {
 
 // NewHeartbeatJob creates a new HeartbeatJob instance.
 func NewHeartbeatJob(interval time.Duration) (*HeartbeatJob, error) {
-	url, err := readConfig("../../config.txt") // Assuming the config file is in the parent directory
+	url, err := readConfig("config.txt") // Assuming the config file is in the parent directory
 	if err != nil {
 		return nil, fmt.Errorf("error reading config: %w", err)
 	}
@@ -92,10 +92,4 @@ func (h *HeartbeatJob) sendHeartbeat() {
 		return
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		log.Printf("Heartbeat sent successfully. Server responded with: %s", resp.Status)
-	} else {
-		log.Printf("Failed to send heartbeat. Server responded with: %s", resp.Status)
-	}
 }

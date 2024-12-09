@@ -24,9 +24,11 @@ type Client struct {
 	messageRequestChannel chan string
 	ChatRequests          map[string]net.Conn
 	currentChatConn       net.Conn
+	CurrentChatServer     string
 }
 
 var lock = &sync.Mutex{}
+var chatLock = &sync.Mutex{}
 var clientInstance *Client
 
 var (
@@ -38,12 +40,52 @@ var (
 	ACCEPT_REQ     = "ACCEPT_REQ"
 )
 
+// This listener will wait for a message from the server which will
+// relocate the chat connection to a new server.
+func (c *Client) StartChatSwitchListener() {
+	conn, err := net.Listen("tcp", ":3003")
+	if err != nil {
+		fmt.Println("Failed to start chat switch listener")
+		return
+	}
+	defer conn.Close()
+	for {
+		serverConn, err := conn.Accept()
+		if err != nil {
+			fmt.Println("Failed to accept connection")
+			continue
+		}
+
+		// Read the new server address
+		buf := make([]byte, 1024)
+		n, err := serverConn.Read(buf)
+		if err != nil {
+			fmt.Printf("Failed to read from server: %v\n", err)
+			continue
+		}
+		newServerAddress := string(buf[:n])
+		newServerAddress = strings.TrimSuffix(newServerAddress, "\n")
+		newConn, err := net.Dial("tcp", newServerAddress)
+		if err != nil {
+			fmt.Printf("Failed to connect to new server: %v\n", err)
+			continue
+		}
+
+		chatLock.Lock()
+		c.CurrentChatServer = newServerAddress
+		c.currentChatConn = newConn
+		chatLock.Unlock()
+	}
+}
+
 func (c *Client) SendMessage(message string) {
 	if c.currentChatConn == nil {
 		fmt.Println("No chat connection established")
 		return
 	}
+	chatLock.Lock()
 	_, err := c.currentChatConn.Write([]byte(message + "\n"))
+	chatLock.Unlock()
 	if err != nil {
 		fmt.Printf("Failed to send message: %v\n", err)
 	}
@@ -57,26 +99,28 @@ func (c *Client) StartChat(messages chan string, serverAddress string, roomId st
 		fmt.Printf("Failed to connect to server at %s: %v\n", serverAddress, err)
 		return
 	}
-	c.currentChatConn = conn
 
+	chatLock.Lock()
+	c.currentChatConn = conn
+	c.CurrentChatServer = serverAddress
+	chatLock.Unlock()
 	// Send the room ID to the server
 	_, err = conn.Write([]byte(fmt.Sprintf("%s#%s\n", c.UserName, roomId)))
 	if err != nil {
 		fmt.Printf("Failed to send room ID: %v\n", err)
 		return
 	}
-
-	// Wait for the server to acknowledge the connection
+	messages <- "START_CHAT"
 
 	// Listen for messages from the server
 	go func() {
 		buffer := make([]byte, 1024)
 		incomplete := ""
 		for {
-			n, err := conn.Read(buffer)
+			n, err := c.currentChatConn.Read(buffer)
 			if err != nil {
-				fmt.Printf("Error reading from server: %v\n", err)
-				return
+				// Just eat the error
+				continue
 			}
 
 			// Append to incomplete data

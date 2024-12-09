@@ -49,6 +49,8 @@ func (api *ServiceAPI) GetServices(c *gin.Context) {
 
 func (api *ServiceAPI) PatchService(c *gin.Context) {
 	clientIP := c.ClientIP()
+	// if it's not registered, just register it (incase central restarts)
+	api.store.Create(clientIP)
 	if _, err := api.store.Patch(clientIP); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return

@@ -237,6 +237,14 @@ func (cr *clientRunner) chatPage(serverAddr string, roomId string) {
 	// Start the chat with the server
 	go cr.client.StartChat(messagesChannel, serverAddr, roomId)
 
+	// Create a text view to display the server name
+	headerView := tview.NewTextView().
+		SetDynamicColors(true).
+		SetScrollable(false).
+		SetWrap(false).
+		SetTextAlign(tview.AlignCenter).
+		SetText("[cyan]Chatting on server: [white]" + cr.client.CurrentChatServer)
+
 	// Create a text view to display chat messages
 	chatView := tview.NewTextView().
 		SetDynamicColors(true).
@@ -246,7 +254,7 @@ func (cr *clientRunner) chatPage(serverAddr string, roomId string) {
 			cr.app.Draw()
 		})
 
-	//Create an input field for user input
+	// Create an input field for user input
 	inputField := tview.NewInputField().
 		SetLabel("Enter a message: ").
 		SetFieldWidth(30)
@@ -260,25 +268,28 @@ func (cr *clientRunner) chatPage(serverAddr string, roomId string) {
 		}
 	})
 
-	// inputField.SetDoneFunc(func(key tcell.Key) {
-	// 	if key == tcell.KeyEnter {
-	// 		// Get user input
-	// 		userMessage := inputField.GetText()
+	// Create a grid layout
+	grid := tview.NewGrid().
+		SetRows(1, 0, 3).                             // Header (fixed height), chat area (expandable), and input area (fixed height)
+		SetColumns(0).                                // Full width
+		AddItem(headerView, 0, 0, 1, 1, 0, 0, false). // Server name at the top
+		AddItem(chatView, 1, 0, 1, 1, 0, 0, false).   // Chat messages in the middle
+		AddItem(inputField, 2, 0, 1, 1, 0, 0, true)   // Input field at the bottom
 
-	// 		// Display user's message
-	// 		//chatView.Write([]byte("[yellow]You > " + userMessage + "\n"))
-	// 		chatView.SetText("[yellow]You > " + userMessage + "\n")
+	// Add the grid to pages and switch to it
+	cr.pages.AddAndSwitchToPage("chat", grid, true)
 
-	// 		// // Send user's message to the server
-	// 		// _, err := fmt.Fprintln(cr.client.conn, userMessage)
-	// 		// if err != nil {
-	// 		// 	chatView.Write([]byte("[red]Error sending message to server.\n"))
-	// 		// }
+	//Wait for the chat to start
+	start := <-messagesChannel
+	fmt.Println("Chat started with: ", start)
+	if start != "START_CHAT" {
+		cr.pages.SwitchToPage("menu")
+		close(messagesChannel)
+		return
+	}
 
-	// 		// Clear input field
-	// 		inputField.SetText("")
-	// 	}
-	// })
+	// We know that cr.client.CurrentChatServer is hydrated for sure, so now we set it again
+	headerView.SetText("[cyan]Chatting on server: [white]" + cr.client.CurrentChatServer)
 
 	// Goroutine to listen to messages from the server
 	go func() {
@@ -293,21 +304,6 @@ func (cr *clientRunner) chatPage(serverAddr string, roomId string) {
 		}
 	}()
 
-	// Create a grid layout
-	grid := tview.NewGrid().
-		SetRows(0, 3).                              // Chat area (expandable) and input area (fixed height)
-		SetColumns(0).                              // Full width
-		AddItem(chatView, 0, 0, 1, 1, 0, 0, false). // Chat messages take the first row
-		AddItem(inputField, 1, 0, 1, 1, 0, 0, true) // Input field takes the second row
-
-	// // Wrap the grid in a frame with a title
-	// frame := tview.NewFrame(grid).
-	// 	SetTitle("Chat").
-	// 	SetTitleAlign(tview.AlignCenter).
-	// 	SetBorder(true)
-
-	// Add the frame to pages and switch to it
-	cr.pages.AddAndSwitchToPage("chat", grid, true)
 }
 
 func (cr *clientRunner) startMatchMaking(username string) {

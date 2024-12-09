@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"math"
+	mathrand "math/rand"
 	"net"
 	"strings"
 	"time"
@@ -131,6 +133,68 @@ func generateRoomId() string {
 	return roomId
 }
 
+/*
+Find the best server to route the clients to, which will provide the best overall experience for
+both clients.
+We want to minimize the maximum latency experience by either clients.
+i.e.
+minimize max(latency(client1, server), latency(client2, server))
+
+if multiple servers have the same minimum latency, we choose one at random.
+*/
+func compute_optimal_server(client1 map[string]float32, client2 map[string]float32) (string, error) {
+	minimized_latency_servers := []string{}   // Array of servers
+	serverLatency := make(map[string]float64) // Map of server to maximum latency experienced by either client
+	for server, latency := range client1 {
+		serverLatency[server] = float64(latency)
+	}
+
+	for server, latency := range client2 {
+		serverLatency[server] = math.Max(serverLatency[server], float64(latency))
+	}
+
+	// Find the minimums
+	minimum_latency := math.MaxFloat64
+	minimum_combined_latency := math.MaxFloat64
+	for server, latency := range serverLatency {
+		// check if both clients have this server
+		if _, ok := client1[server]; !ok {
+			continue
+		}
+		if _, ok := client2[server]; !ok {
+			continue
+		}
+
+		combined_latency := float64(client1[server] + client2[server])
+		// TODO: Fix DRY
+		if latency < minimum_latency {
+			minimum_latency = latency
+			minimized_latency_servers = []string{} // Reset the list
+			minimized_latency_servers = append(minimized_latency_servers, server)
+			minimum_combined_latency = combined_latency
+		} else if latency == minimum_latency && combined_latency < minimum_combined_latency {
+			minimized_latency_servers = []string{} // Reset the list
+			minimized_latency_servers = append(minimized_latency_servers, server)
+			minimum_combined_latency = combined_latency
+		} else if latency == minimum_latency && combined_latency == minimum_combined_latency {
+			minimized_latency_servers = append(minimized_latency_servers, server)
+		}
+	}
+
+	if len(minimized_latency_servers) == 0 {
+		return "", fmt.Errorf("no server found")
+	}
+
+	if len(minimized_latency_servers) == 1 {
+		return minimized_latency_servers[0], nil
+	}
+
+	// Choose one at random
+	r := mathrand.New(mathrand.NewSource(time.Now().UnixNano()))
+	randomIndex := r.Intn(len(minimized_latency_servers))
+	return minimized_latency_servers[randomIndex], nil
+}
+
 // handleConnection processes an individual client connection
 func (ms *MatchmakingServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
@@ -207,31 +271,20 @@ loop:
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	// Find a server match
-	// For now, just send them the first in common server
-	servers1, err1 := ms.clientStore.GetDelayList(username)
-	servers2, err2 := ms.clientStore.GetDelayList(req_user)
-	if err1 != nil || err2 != nil {
-		log.Printf("Failed to get delay list: %v\n", err1)
+	// Send the server IP to both clients
+	client1Delay, err := ms.clientStore.GetDelayList(username)
+	client2Delay, err2 := ms.clientStore.GetDelayList(req_user)
+	if err != nil || err2 != nil {
 		ServerError(conn)
 		ServerError(connRequest)
 		return
 	}
-	common := []string{}
-	// O(n^2) ?????? OMGG HOW CAN I EVER GO OUT IN PUBLIC
-	for server1 := range servers1 {
-		for server2 := range servers2 {
-			if server1 == server2 {
-				common = append(common, server1)
-			}
-		}
-	}
-	if len(common) == 0 {
+	serverIP, err := compute_optimal_server(client1Delay, client2Delay)
+	if err != nil {
 		ServerError(conn)
+		ServerError(connRequest)
 		return
 	}
-	// Send the server IP to both clients
-	serverIP := common[0]
 	roomId := generateRoomId()
 
 	response := fmt.Sprintf("IP:%s\nRoomID:%s\n", serverIP, roomId)
