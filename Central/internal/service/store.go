@@ -58,8 +58,10 @@ func (s *InMemoryStore) Read() ([]string, error) {
 	defer s.mu.RUnlock()
 
 	var ips []string
-	for ip, _ := range s.data {
-		ips = append(ips, ip)
+	for ip, heartbeat := range s.data {
+		if time.Since(heartbeat.lastHeartbeat) <= 10*time.Second {
+			ips = append(ips, ip)
+		}
 	}
 
 	return ips, nil

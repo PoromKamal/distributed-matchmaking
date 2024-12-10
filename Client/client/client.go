@@ -280,17 +280,17 @@ func (c *Client) updateServerDelays() {
 		return
 	}
 
+	newServerMap := make(map[string]float32)
 	for _, server := range servers {
-		if _, exists := c.ServerRegistry[server]; !exists {
-			c.ServerRegistry[server] = math.MaxFloat32
-		}
+		newServerMap[server] = math.MaxFloat32
 	}
+	c.ServerRegistry = newServerMap
 
 	for serverIP := range c.ServerRegistry {
 		delay, err := pingServer(serverIP)
 		if err != nil {
-			fmt.Printf("Error pinging server %s: %v\n", serverIP, err)
-			continue
+			// the server is likely down, just set it to max float32
+			delay = math.MaxFloat32
 		}
 
 		// Update the delay in the ServerRegistry
