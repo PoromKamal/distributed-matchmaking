@@ -516,12 +516,12 @@ func (c *Client) Register() <-chan error {
 		}
 		defer resp.Body.Close()
 
-		// Handle the response, we are ok with conflict.
-		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
+		// Handle the response
+		if resp.StatusCode != http.StatusCreated {
 			//body, _ := io.ReadAll(resp.Body)
 			//fmt.Printf("Server returned error: %s\n", string(body))
-			result <- fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-			return
+			fmt.Println("\nPlease Register Using a unique username!\n")
+			os.Exit(1) // lets just blow up, let them restart the client.
 		}
 
 		//body, _ := io.ReadAll(resp.Body)

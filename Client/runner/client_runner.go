@@ -84,16 +84,15 @@ func (cr *clientRunner) showLoadingBarWithInitialization(task string, initFunc f
 
 	for {
 		select {
-		case err, ok := <-resultChan:
+		case _, ok := <-resultChan:
 			fmt.Printf("\r%s%s", task, "...")
 			// Exit the loop if the channel is closed
-			if !ok {
+			if ok {
 				fmt.Println(" done!")
 				return nil
-			}
-			if err != nil {
+			} else {
 				fmt.Println("Error!")
-				return err
+				os.Exit(1)
 			}
 			fmt.Println(" done!")
 			return nil

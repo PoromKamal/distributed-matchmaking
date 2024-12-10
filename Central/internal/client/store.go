@@ -56,6 +56,13 @@ func GetInMemoryStore() *InMemoryStore {
 func (s *InMemoryStore) Create(ip, username string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// check if there's already a client with this Ip
+	for existingIP, existingUsername := range s.data {
+		if existingUsername == username {
+			return fmt.Errorf("the username %s is already associated with IP %s", username, existingIP)
+		}
+	}
+
 	s.data[ip] = username
 	return nil
 }
