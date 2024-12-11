@@ -76,74 +76,117 @@ func (c *Client) StartChat(messages chan string, serverAddress string, roomId st
 	}
 	messages <- "START_CHAT"
 	// Listen for messages from the server
+	serverMessages, err := net.Listen("tcp", ":3003")
+	if err != nil {
+		messages <- "FAILED"
+		return
+	}
+	// Create a channel to handle new server connections
+	connChan := make(chan net.Conn)
+
+	go func() {
+		// Goroutine to accept connections and send them to the channel
+		for {
+			conn, err := serverMessages.Accept()
+			if err != nil {
+				fmt.Printf("Failed to accept connection: %v\n", err)
+				continue
+			}
+			connChan <- conn
+		}
+	}()
+
 	go func() {
 		buffer := make([]byte, 1024)
 		incomplete := ""
 		for {
-			n, err := c.currentChatConn.Read(buffer)
-			//c.currentChatConn.Write([]byte("ACK\n"))
-			if err != nil {
-				// Just eat the error
-				continue
-			}
-			//fmt.Printf("Got message: %s\n", string(buffer[:n]))
-			//time.Sleep(1 * time.Second)
-			// Append to incomplete data
-			incomplete += string(buffer[:n])
+			select {
+			case serverConn := <-connChan: // Handle new server connection
+				buf := make([]byte, 1024)
+				n, err := serverConn.Read(buf)
+				if err != nil {
+					fmt.Printf("Failed to read from server: %v\n", err)
+					continue
+				}
+				newServerAddress := strings.TrimSuffix(string(buf[:n]), "\n")
+				newConn, err := net.Dial("tcp", newServerAddress+":3002")
+				if err != nil {
+					fmt.Printf("Failed to connect to new server: %v\n", err)
+					continue
+				}
+				c.CurrentChatServer = newServerAddress
+				c.currentChatConn = newConn
 
-			// Split messages based on newline
-			messagesArr := splitMessages(&incomplete, '\n')
-			for _, msg := range messagesArr {
-				messages <- msg
+				// Send the room ID to the new server
+				_, err = c.currentChatConn.Write([]byte(fmt.Sprintf("%s#%s\n",
+					c.UserName,
+					c.currentRoomId)))
+				if err != nil {
+					fmt.Printf("Failed to send room ID: %v\n", err)
+				}
+
+			default: // Handle chat messages
+				n, err := c.currentChatConn.Read(buffer)
+				if err != nil {
+					// Handle the error and continue
+					continue
+				}
+				incomplete += string(buffer[:n])
+
+				// Split and process messages
+				messagesArr := splitMessages(&incomplete, '\n')
+				for _, msg := range messagesArr {
+					messages <- msg
+				}
 			}
 		}
 	}()
 
-	go func() {
-		// listen for server relocations
-		conn, err := net.Listen("tcp", ":3003")
-		if err != nil {
-			fmt.Println("Failed to start chat switch listener")
-			return
-		}
-		defer conn.Close()
-		for {
-			serverConn, err := conn.Accept()
-			if err != nil {
-				fmt.Println("Failed to accept connection")
-				continue
-			}
+	// go func() {
+	// 	// listen for server relocations
+	// 	conn, err := net.Listen("tcp", ":3003")
+	// 	if err != nil {
+	// 		fmt.Println("Failed to start chat switch listener")
+	// 		return
+	// 	}
+	// 	defer conn.Close()
+	// 	for {
+	// 		serverConn, err := conn.Accept()
+	// 		if err != nil {
+	// 			fmt.Println("Failed to accept connection")
+	// 			continue
+	// 		}
 
-			// Read the new server address
-			buf := make([]byte, 1024)
-			n, err := serverConn.Read(buf)
-			if err != nil {
-				fmt.Printf("Failed to read from server: %v\n", err)
-				continue
-			}
-			newServerAddress := string(buf[:n])
-			newServerAddress = strings.TrimSuffix(newServerAddress, "\n")
-			newConn, err := net.Dial("tcp", newServerAddress+":3002")
-			if err != nil {
-				fmt.Printf("Failed to connect to new server: %v\n", err)
-				continue
-			}
+	// 		// Read the new server address
+	// 		buf := make([]byte, 1024)
+	// 		n, err := serverConn.Read(buf)
+	// 		if err != nil {
+	// 			fmt.Printf("Failed to read from server: %v\n", err)
+	// 			continue
+	// 		}
+	// 		newServerAddress := string(buf[:n])
+	// 		newServerAddress = strings.TrimSuffix(newServerAddress, "\n")
+	// 		newConn, err := net.Dial("tcp", newServerAddress+":3002")
+	// 		if err != nil {
+	// 			fmt.Printf("Failed to connect to new server: %v\n", err)
+	// 			continue
+	// 		}
 
-			//chatLock.Lock()
-			c.CurrentChatServer = newServerAddress
-			c.currentChatConn = newConn
+	// 		//chatLock.Lock()
+	// 		c.CurrentChatServer = newServerAddress
+	// 		c.currentChatConn = newConn
 
-			// Register the client and send roomId to the new server
-			// Send the room ID to the server
-			_, err = clientInstance.currentChatConn.Write([]byte(fmt.Sprintf("%s#%s\n",
-				clientInstance.UserName,
-				clientInstance.currentRoomId)))
-			if err != nil {
-				fmt.Printf("Failed to send room ID: %v\n", err)
-				continue
-			}
-		}
-	}()
+	// 		// Register the client and send roomId to the new server
+	// 		// Send the room ID to the server
+	// 		_, err = clientInstance.currentChatConn.Write([]byte(fmt.Sprintf("%s#%s\n",
+	// 			clientInstance.UserName,
+	// 			clientInstance.currentRoomId)))
+	// 		if err != nil {
+	// 			fmt.Printf("Failed to send room ID: %v\n", err)
+	// 			continue
+	// 		}
+	// 	}
+	// }()
 }
 
 // Utility to split messages based on a delimiter and handle leftover data

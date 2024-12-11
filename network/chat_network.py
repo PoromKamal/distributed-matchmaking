@@ -107,8 +107,8 @@ def myNetwork():
     net.get('s5').start([])
     
     info (' *** Starting Central\n')
-    ##central.cmd("cd /home/mininet/d58-final-project/Central && sudo ./build.sh --run &")
-    servers = [serv1, serv3, serv4]
+    central.cmd("cd /home/mininet/d58-final-project/Central && sudo ./build.sh --run &")
+    servers = [serv1, serv2, serv3, serv4]
     for server in servers:
       server.cmd("cd /home/mininet/d58-final-project/Server && sudo ./build.sh --run &")
     info( '*** Start SSHd daemon on hosts\n')
