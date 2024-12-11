@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	conn, err := net.Dial("tcp", "localhost:8443")
+	conn, err := net.Dial("tcp", "localhost:3137")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -30,8 +30,8 @@ func main() {
 		return
 	}
 
-	fmt.Println("Exuection Done")
-
+	fmt.Println("Done: Enjoy your private echo chat!.")
+	fmt.Println("\n\n\n\n\n")
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Enter messages (type 'exit' to quit):")
 	for {

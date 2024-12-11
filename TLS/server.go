@@ -9,12 +9,12 @@ import (
 )
 
 func main() {
-	listener, err := net.Listen("tcp", ":8443")
+	listener, err := net.Listen("tcp", ":3137")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer listener.Close()
-	fmt.Println("Server listening on port 8443")
+	fmt.Println("Server listening on port 3137")
 
 	for {
 		conn, err := listener.Accept()

@@ -75,9 +75,6 @@ func (c *TLSConnection) encryptContent(data []byte) ([]byte, error) {
 
 func (c *TLSConnection) decryptContent(data []byte) ([]byte, error) {
 	blockSize := c.matBlock.DecryptCipher.BlockSize()
-	println(blockSize)
-	println(len(data))
-
 	if len(data) < blockSize {
 		return nil, errors.New("bad length")
 	}
