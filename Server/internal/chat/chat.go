@@ -7,7 +7,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"time"
 )
 
 type ChatManager struct {
@@ -91,13 +90,6 @@ func (cm *ChatManager) handleClient(conn net.Conn) {
 		if message == "" {
 			continue
 		}
-
-		timer := time.NewTimer(2 * time.Second)
-		serverIp := conn.LocalAddr().String()
-		go func() {
-			<-timer.C
-			cm.broadcastMessage("server", roomId, "Pong from server "+serverIp+"\n")
-		}()
 
 		// Broadcast the message to all clients in the same roomId
 		cm.broadcastMessage(username, roomId, message)
