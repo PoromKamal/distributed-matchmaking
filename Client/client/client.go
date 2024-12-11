@@ -141,52 +141,6 @@ func (c *Client) StartChat(messages chan string, serverAddress string, roomId st
 			}
 		}
 	}()
-
-	// go func() {
-	// 	// listen for server relocations
-	// 	conn, err := net.Listen("tcp", ":3003")
-	// 	if err != nil {
-	// 		fmt.Println("Failed to start chat switch listener")
-	// 		return
-	// 	}
-	// 	defer conn.Close()
-	// 	for {
-	// 		serverConn, err := conn.Accept()
-	// 		if err != nil {
-	// 			fmt.Println("Failed to accept connection")
-	// 			continue
-	// 		}
-
-	// 		// Read the new server address
-	// 		buf := make([]byte, 1024)
-	// 		n, err := serverConn.Read(buf)
-	// 		if err != nil {
-	// 			fmt.Printf("Failed to read from server: %v\n", err)
-	// 			continue
-	// 		}
-	// 		newServerAddress := string(buf[:n])
-	// 		newServerAddress = strings.TrimSuffix(newServerAddress, "\n")
-	// 		newConn, err := net.Dial("tcp", newServerAddress+":3002")
-	// 		if err != nil {
-	// 			fmt.Printf("Failed to connect to new server: %v\n", err)
-	// 			continue
-	// 		}
-
-	// 		//chatLock.Lock()
-	// 		c.CurrentChatServer = newServerAddress
-	// 		c.currentChatConn = newConn
-
-	// 		// Register the client and send roomId to the new server
-	// 		// Send the room ID to the server
-	// 		_, err = clientInstance.currentChatConn.Write([]byte(fmt.Sprintf("%s#%s\n",
-	// 			clientInstance.UserName,
-	// 			clientInstance.currentRoomId)))
-	// 		if err != nil {
-	// 			fmt.Printf("Failed to send room ID: %v\n", err)
-	// 			continue
-	// 		}
-	// 	}
-	// }()
 }
 
 // Utility to split messages based on a delimiter and handle leftover data
@@ -226,7 +180,6 @@ func (c *Client) StartMatchmaking(username string, statusChannel chan string) er
 	}
 
 	// Continuously read messages from the server
-	// go func() {
 	for {
 		buf := make([]byte, 1024)
 		n, err := conn.Read(buf)
@@ -249,7 +202,6 @@ func (c *Client) StartMatchmaking(username string, statusChannel chan string) er
 			statusChannel <- msg
 		}
 	}
-	//}()
 	return nil
 }
 
@@ -371,33 +323,6 @@ func GetClient() *Client {
 	return clientInstance
 }
 
-func GetInstance() *Client {
-	if clientInstance == nil {
-		lock.Lock()
-		defer lock.Unlock()
-		if clientInstance == nil {
-			// Basic initialization without network calls
-			url, err := readConfig("client/config.txt")
-			if err != nil {
-				fmt.Printf("Error reading config: %v\n", err)
-				return nil
-			}
-			clientInstance = &Client{
-				CentralURL:        url,
-				ServerRegistry:    make(map[string]float32), // Empty for now
-				serverRegistryAPI: service.NewCentralServerRegistry(url),
-			}
-			registrationResult := <-clientInstance.Register()
-			if registrationResult != nil {
-				fmt.Println("Failed to register with Central!")
-				os.Exit(1)
-			}
-			clientInstance.Initialize()
-		}
-	}
-	return clientInstance
-}
-
 func (c *Client) AcceptMessageRequest(username string, statusChannel chan string) {
 	conn, exists := c.ChatRequests[username]
 	if !exists {
@@ -481,7 +406,6 @@ func (c *Client) Initialize() <-chan error {
 	// Create a channel to communicate the result
 	resultChan := make(chan error)
 	go messageRequestListener()
-	//go StartChatSwitchListener()
 	// Start the initialization in a goroutine
 	go func() {
 		// Create channels for server fetching
@@ -561,16 +485,9 @@ func (c *Client) Register() <-chan error {
 
 		// Handle the response
 		if resp.StatusCode != http.StatusCreated {
-			//body, _ := io.ReadAll(resp.Body)
-			//fmt.Printf("Server returned error: %s\n", string(body))
-			fmt.Println("\nPlease Register Using a unique username!\n")
-			os.Exit(1) // lets just blow up, let them restart the client.
+			fmt.Println("\nPlease Register Using a unique username!")
+			os.Exit(1)
 		}
-
-		//body, _ := io.ReadAll(resp.Body)
-
-		//fmt.Println("Successfully registered with Central!")
-		//fmt.Println(string(body))
 		result <- nil
 	}()
 	return result
