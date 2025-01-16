@@ -2,6 +2,9 @@
 
 A dynamic, distributed chat server built using Mininet, designed for low latency and high reliability. This project implements optimal server selection, load balancing, traffic congestion control, and secure communication to enhance the chat experience in distributed network environments.
 
+## Demo
+[Demo video on Youtube](https://www.youtube.com/watch?v=6KxOdmUmIco)
+
 ## Features
 
 - **Dynamic Server Selection:** Implements an algorithm to connect clients to the most optimal server based on real-time network conditions, reducing average chat latency from 12 seconds to 3 seconds.
