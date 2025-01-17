@@ -16,4 +16,4 @@ A dynamic, distributed chat server built using Mininet, designed for low latency
 The chat server uses a distributed architecture where multiple servers collaborate to provide seamless communication. Clients connect to the most suitable server based on network metrics, ensuring low latency and efficient resource usage.
 
 ## Paper
-This project was completed as our final project for Computer Networks (CSCD58) at UofT. The report/motivation for this project can be seen in report.pdf.
+This project was completed as our final project for Computer Networks (CSCD58) at UofT. The report/motivation for this project can be seen in [Project Report](https://github.com/PoromKamal/distributed-matchmaking/blob/main/D58_Final_Project_Report.pdf).
